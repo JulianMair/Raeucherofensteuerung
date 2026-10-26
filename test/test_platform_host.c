@@ -7,11 +7,13 @@
 #include "unity.h"
 
 #include "fake_clock.h"
+#include "mock_log.h"
 #include "mock_output.h"
 #include "mock_storage.h"
 #include "mock_temp_sensor.h"
 
 #include <math.h>
+#include <string.h>
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -373,6 +375,65 @@ static void test_mock_storage_injected_errors(void)
     TEST_ASSERT_EQUAL_UINT(2, flash_mock.save_calls);
 }
 
+/* ---- Mock-Log ---------------------------------------------------------- */
+
+static mock_log_t logger_mock;
+static rof_log_t logger_if;
+
+static void logger_setup(void)
+{
+    mock_log_init(&logger_mock);
+    logger_if = mock_log_interface(&logger_mock);
+}
+
+static void test_mock_log_starts_empty(void)
+{
+    logger_setup();
+    for (int level = 0; level < ROF_LOG_LEVEL_COUNT; level++) {
+        TEST_ASSERT_EQUAL_UINT(0, logger_mock.count[level]);
+    }
+    TEST_ASSERT_EQUAL_STRING("", logger_mock.last_msg);
+}
+
+static void test_mock_log_counts_per_level_and_keeps_last(void)
+{
+    logger_setup();
+    rof_log_write(&logger_if, ROF_LOG_INFO, "start");
+    rof_log_write(&logger_if, ROF_LOG_WARN, "sensor slow");
+    rof_log_write(&logger_if, ROF_LOG_ERROR, "chamber sensor missing");
+
+    TEST_ASSERT_EQUAL_UINT(1, logger_mock.count[ROF_LOG_ERROR]);
+    TEST_ASSERT_EQUAL_UINT(1, logger_mock.count[ROF_LOG_WARN]);
+    TEST_ASSERT_EQUAL_UINT(1, logger_mock.count[ROF_LOG_INFO]);
+    TEST_ASSERT_EQUAL_UINT(0, logger_mock.count[ROF_LOG_DEBUG]);
+    TEST_ASSERT_EQUAL(ROF_LOG_ERROR, logger_mock.last_level);
+    TEST_ASSERT_EQUAL_STRING("chamber sensor missing", logger_mock.last_msg);
+}
+
+static void test_mock_log_copies_message(void)
+{
+    logger_setup();
+    char msg[] = "original";
+    rof_log_write(&logger_if, ROF_LOG_INFO, msg);
+    msg[0] = 'X';
+
+    TEST_ASSERT_EQUAL_STRING("Xriginal", msg);
+    TEST_ASSERT_EQUAL_STRING("original", logger_mock.last_msg);
+}
+
+static void test_mock_log_truncates_long_message(void)
+{
+    logger_setup();
+    char msg[MOCK_LOG_MSG_MAX + 10];
+    for (size_t i = 0; i < sizeof(msg) - 1; i++) {
+        msg[i] = 'a';
+    }
+    msg[sizeof(msg) - 1] = '\0';
+    rof_log_write(&logger_if, ROF_LOG_DEBUG, msg);
+
+    TEST_ASSERT_EQUAL_size_t(MOCK_LOG_MSG_MAX - 1, strlen(logger_mock.last_msg));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -405,6 +466,11 @@ int main(void)
     RUN_TEST(test_mock_storage_rejects_invalid_keys);
     RUN_TEST(test_mock_storage_full_is_no_space);
     RUN_TEST(test_mock_storage_injected_errors);
+
+    RUN_TEST(test_mock_log_starts_empty);
+    RUN_TEST(test_mock_log_counts_per_level_and_keeps_last);
+    RUN_TEST(test_mock_log_copies_message);
+    RUN_TEST(test_mock_log_truncates_long_message);
 
     return UNITY_END();
 }
