@@ -765,6 +765,73 @@ static void test_overflow_clears_when_sensors_are_removed(void)
     TEST_ASSERT_FALSE(rof_sensor_registry_overflow(&reg));
 }
 
+/* ---- Zweiter Treibertyp ------------------------------------------------- */
+
+#define ID_PT 0x3100000000000001ULL
+
+static mock_temp_sensor_t pt_mock;
+static rof_temp_sensor_t pt_bus;
+
+/* Zweiter Treiber, der wie ein PT1000 über MAX31865 seinen Typ meldet */
+static void init_with_two_drivers(void)
+{
+    mock_temp_sensor_init(&pt_mock);
+    pt_bus = mock_temp_sensor_interface(&pt_mock);
+    static const rof_temp_sensor_t *two[2];
+    two[0] = &bus;
+    two[1] = &pt_bus;
+    TEST_ASSERT_EQUAL(ROF_OK, rof_sensor_registry_init(&reg, two, 2, &flash, &logger_if));
+}
+
+/* SEN-06: ein neuer Sensortyp braucht nur einen Treiber, keine Änderung in core */
+static void test_second_driver_type_works_without_core_changes(void)
+{
+    init_with_two_drivers();
+    mock_temp_sensor_plug(&bus_mock, ID_A, "DS18B20", 80.0f);
+    mock_temp_sensor_plug(&pt_mock, ID_PT, "PT1000", 65.0f);
+    rof_sensor_registry_update(&reg);
+
+    TEST_ASSERT_EQUAL_STRING("DS18B20", existing_channel(ID_A)->type);
+    TEST_ASSERT_EQUAL_STRING("PT1000", existing_channel(ID_PT)->type);
+
+    TEST_ASSERT_EQUAL(ROF_OK, rof_sensor_registry_assign(&reg, ID_PT, ROF_ROLE_PROBE_1));
+    float temp_c = 0.0f;
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_OK, rof_sensor_registry_role(&reg, ROF_ROLE_PROBE_1, &temp_c));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 65.0f, temp_c);
+    TEST_ASSERT_EQUAL_UINT(1, pt_mock.read_calls);
+    TEST_ASSERT_EQUAL_UINT(1, bus_mock.read_calls);
+}
+
+/* SEN-06, SEN-07: dieselbe ID von zwei Treibern ist ebenfalls doppelt */
+static void test_same_id_on_two_drivers_is_duplicate(void)
+{
+    init_with_two_drivers();
+    mock_temp_sensor_plug(&bus_mock, ID_A, "DS18B20", 80.0f);
+    mock_temp_sensor_plug(&pt_mock, ID_A, "PT1000", 65.0f);
+
+    rof_sensor_registry_update(&reg);
+
+    TEST_ASSERT_TRUE(existing_channel(ID_A)->duplicate);
+}
+
+/* SEN-06: ein Busfehler trifft nur die Sensoren dieses Treibers */
+static void test_bus_error_affects_only_its_own_driver(void)
+{
+    init_with_two_drivers();
+    mock_temp_sensor_plug(&bus_mock, ID_A, "DS18B20", 80.0f);
+    mock_temp_sensor_plug(&pt_mock, ID_PT, "PT1000", 65.0f);
+    rof_sensor_registry_update(&reg);
+    rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_CHAMBER);
+    rof_sensor_registry_assign(&reg, ID_PT, ROF_ROLE_PROBE_1);
+
+    mock_temp_sensor_set_enumerate_status(&bus_mock, ROF_ERR_IO);
+    rof_sensor_registry_update(&reg);
+
+    float temp_c = 0.0f;
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_MISSING, rof_sensor_registry_role(&reg, ROF_ROLE_CHAMBER, &temp_c));
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_OK, rof_sensor_registry_role(&reg, ROF_ROLE_PROBE_1, &temp_c));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -820,6 +887,10 @@ int main(void)
     RUN_TEST(test_assigned_sensor_has_priority_over_new_sensors);
     RUN_TEST(test_assigned_sensor_beyond_scan_limit_counts_as_missing);
     RUN_TEST(test_overflow_clears_when_sensors_are_removed);
+
+    RUN_TEST(test_second_driver_type_works_without_core_changes);
+    RUN_TEST(test_same_id_on_two_drivers_is_duplicate);
+    RUN_TEST(test_bus_error_affects_only_its_own_driver);
 
     return UNITY_END();
 }
