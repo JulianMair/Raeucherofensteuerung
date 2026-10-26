@@ -39,13 +39,13 @@ Alle Anforderungen stammen aus `CLAUDE.md`. Jede hat eine feste ID aus Bereich u
 
 | ID | Anforderung | Meilenstein | Nachweis |
 |---|---|---|---|
-| SEN-01 | Bis zu 8 Kanäle, jeder mit eindeutiger ID (DS18B20: ROM-Adresse), Typ, Rolle und Kalibrieroffset | M2 | offen |
-| SEN-02 | Rollen: `GARRAUM`, `KERN_1`, `KERN_2`, `GENERATOR`, `NICHT_ZUGEORDNET` | M2 | offen |
-| SEN-03 | Treiber melden über `aufzaehlen()`, welche Sensoren da sind. Neue Sensoren erscheinen als nicht zugeordnet | M2 | offen |
-| SEN-04 | Die Zuordnung ID zu Rolle wird über das Speicher-Interface gespeichert und nach Neustart wiederhergestellt | M2 | offen |
-| SEN-05 | Fehlt ein zugeordneter Sensor, wird seine Rolle als fehlerhaft gemeldet (beim Garraum siehe SAF-07) | M2 | offen |
-| SEN-06 | Ein weiterer Sensortyp (z. B. PT1000 mit MAX31865) kommt nur als neuer Treiber hinzu, ohne Änderung in core | M2 | offen |
-| SEN-07 | Host-Tests: an- und abstecken, Rolle zuweisen, Neustart mit gespeicherter Zuordnung, doppelte IDs, mehr als 8 Sensoren | M2 | offen |
+| SEN-01 | Bis zu 8 Kanäle, jeder mit eindeutiger ID (DS18B20: ROM-Adresse), Typ, Rolle und Kalibrieroffset | M2 | `test_sensor_registry`: `test_plugged_sensors_appear_as_unassigned_channels` (ID, Typ, Rolle), `test_offset_is_added_to_reading`, `test_offset_outside_limits_is_rejected`, `test_nine_sensors_fill_eight_channels_and_report_overflow` (höchstens 8) |
+| SEN-02 | Rollen: `GARRAUM`, `KERN_1`, `KERN_2`, `GENERATOR`, `NICHT_ZUGEORDNET` | M2 | `test_all_roles_can_be_assigned_to_different_sensors`, `test_assign_moves_role_from_previous_sensor`, `test_assign_unassigned_releases_role`, `test_assign_rejects_invalid_role` |
+| SEN-03 | Treiber melden über `aufzaehlen()`, welche Sensoren da sind. Neue Sensoren erscheinen als nicht zugeordnet | M2 | `test_plugged_sensors_appear_as_unassigned_channels`, `test_unplugged_unassigned_sensor_frees_its_channel`, `test_replugged_sensor_gets_a_channel_again` |
+| SEN-04 | Die Zuordnung ID zu Rolle wird über das Speicher-Interface gespeichert und nach Neustart wiederhergestellt | M2 | `test_assign_sets_role_and_saves`, `test_saved_block_has_version_count_and_entries`, `test_restart_restores_roles_and_offsets`, `test_assign_is_undone_when_saving_fails`, `test_corrupt_stored_blocks_are_discarded` |
+| SEN-05 | Fehlt ein zugeordneter Sensor, wird seine Rolle als fehlerhaft gemeldet (beim Garraum siehe SAF-07) | M2 | `test_missing_assigned_sensor_reports_missing`, `test_read_error_reports_read_error`, `test_restored_role_is_missing_until_sensor_found`, `test_bus_error_makes_assigned_role_missing`. Auslösen beim Garraum folgt mit SAF-07 in M3 |
+| SEN-06 | Ein weiterer Sensortyp (z. B. PT1000 mit MAX31865) kommt nur als neuer Treiber hinzu, ohne Änderung in core | M2 | `test_second_driver_type_works_without_core_changes`. Der Commit dazu ändert nur Tests, nichts in core |
+| SEN-07 | Host-Tests: an- und abstecken, Rolle zuweisen, Neustart mit gespeicherter Zuordnung, doppelte IDs, mehr als 8 Sensoren | M2 | an- und abstecken: `test_unplugged_unassigned_sensor_frees_its_channel`; Rolle zuweisen: `test_assign_sets_role_and_saves`; Neustart: `test_restart_restores_roles_and_offsets`; doppelte IDs: `test_duplicate_id_gives_one_channel_marked_duplicate`, `test_duplicate_assigned_sensor_reports_duplicate`; mehr als 8: `test_nine_sensors_fill_eight_channels_and_report_overflow`, `test_assigned_sensor_has_priority_over_new_sensors` |
 
 ## CTL – Regelung, Simulator, Zustandsautomat (Abschnitt 4)
 

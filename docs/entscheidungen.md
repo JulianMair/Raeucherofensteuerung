@@ -82,3 +82,48 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
   - Eine Negativliste (`esp_*`, `freertos/*`): Sie übersieht jeden Header, an den niemand gedacht hat.
   - `grep` direkt in `ci.yml`: läuft lokal nicht mit und ist schwer zu testen.
   - Sich darauf verlassen, dass ESP-Header auf dem Host fehlen: Das deckt Dateien außerhalb des Host-Builds und firmware/net nicht ab.
+
+## E-011 Lebensdauer der Kanäle und Vorrang zugeordneter Sensoren (M2)
+
+- **Kontext:** Es gibt höchstens 8 Kanäle (SEN-01). Sensoren werden an- und abgesteckt, und es können mehr als 8 stecken (SEN-07). Ein fehlender zugeordneter Sensor muss als Fehler sichtbar bleiben (SEN-05).
+- **Entscheidung:**
+  - Ein Kanal bleibt, solange sein Sensor steckt oder er eine Rolle oder einen Offset trägt. Abgezogene Sensoren ohne Einstellungen geben ihren Kanal am Ende von `update()` frei.
+  - Bekannte Kanäle behalten ihren Platz, auch zugeordnete ohne Sensor. Neue Sensoren bekommen nur freie Kanäle, sonst wird `overflow` gesetzt. Ein frei gewordener Kanal steht deshalb erst ab dem nächsten `update()` zur Verfügung.
+  - `update()` fragt je Treiber bis zu 16 Sensoren ab (`ROF_SENSOR_SCAN_MAX`), doppelt so viele wie Kanäle. So wird ein zugeordneter Sensor auch hinter acht neuen noch gefunden. Steckt er hinter mehr als 16, gilt er als fehlend. Das ist die sichere Seite.
+  - Fehler (fehlender Sensor, doppelte ID, Überlauf) werden einmal je Auftreten geloggt, nicht bei jedem `update()`.
+- **Verworfen:**
+  - Kanäle in der Reihenfolge des Busses neu vergeben: Ein neuer Sensor könnte einen zugeordneten verdrängen.
+  - Nur 8 Sensoren je Treiber abfragen: Ein zugeordneter Sensor an neunter Stelle würde fälschlich fehlen.
+
+## E-012 Speicherformat der Sensorzuordnung (M2)
+
+- **Kontext:** Rollen und Offsets müssen einen Neustart überleben (SEN-04). Eine spätere Firmware kann das Format ändern, und gespeicherte Daten können beschädigt sein.
+- **Entscheidung:** Ein Block unter dem Schlüssel `sensor_roles`: Versions-Byte, Anzahl, dann je Kanal ID (8 Byte), Rolle (1 Byte) und Offset (4 Byte). Mehrbytewerte stehen mit dem niederwertigsten Byte zuerst. Gespeichert werden nur Kanäle mit Rolle oder Offset. Beim Laden wird der ganze Block verworfen, sobald irgendetwas nicht stimmt: Version, Länge, Rolle, Offset, doppelte ID oder doppelte Rolle. Die Verwaltung startet dann ohne Zuordnung, der Garraum ist nicht zugeordnet und das Heizen gesperrt.
+- **Verworfen:**
+  - Das Struct direkt mit `memcpy` speichern: Füllbytes und Feldreihenfolge hängen vom Compiler ab, und ein neues Feld macht alte Daten unlesbar, ohne dass es jemand merkt.
+  - Nur fehlerhafte Einträge überspringen und den Rest übernehmen: Bei teilweise beschädigten Daten wäre unklar, welcher Sensor wirklich der Garraum ist.
+
+## E-013 Doppelte Sensor-IDs werden nicht gelesen (M2)
+
+- **Kontext:** Meldet ein Bus oder melden zwei Treiber dieselbe ID, ist unklar, welcher Sensor beim Lesen antwortet (SEN-07).
+- **Entscheidung:** Der Kanal wird als `duplicate` markiert und nicht gelesen. Seine Rolle meldet `ROF_ROLE_STATUS_DUPLICATE`, beim Garraum ist das in M3 ein Auslöser. Die Markierung verschwindet, sobald die ID wieder eindeutig ist.
+- **Verworfen:**
+  - Den ersten Treffer lesen: Er kann vom falschen Sensor stammen, ohne dass es auffällt.
+  - Die doppelte Meldung ignorieren: Der Fehler bliebe unsichtbar.
+
+## E-014 Rollen verschieben, Offset ±5 °C, Speichern als Transaktion (M2)
+
+- **Kontext:** Beim Zuweisen kann die Rolle schon vergeben sein. Für den Offset braucht es Grenzen. Und das Speichern kann scheitern.
+- **Entscheidung:**
+  - Vom Nutzer entschieden: Eine vergebene Rolle wird verschoben, der bisherige Sensor ist danach nicht zugeordnet. Es gibt keinen Moment ohne Garraumsensor.
+  - Vom Nutzer entschieden: Der Offset darf zwischen −5 °C und +5 °C liegen. Werte außerhalb und NaN werden abgelehnt, nicht begrenzt. Der DS18B20 ist auf ±0,5 °C genau; eine größere Abweichung spricht eher für einen defekten Sensor.
+  - Zuweisen und Offset setzen speichern sofort. Scheitert das Speichern, wird die Änderung im RAM zurückgenommen und der Fehler gemeldet. RAM und Flash stimmen so immer überein.
+- **Verworfen:**
+  - Eine vergebene Rolle ablehnen: Man müsste erst die alte Zuordnung lösen. Dazwischen gäbe es keinen Garraumsensor.
+  - Die Änderung trotz Speicherfehler behalten: Nach dem nächsten Neustart wäre sie stillschweigend weg.
+
+## E-015 Rollenstatus mit Grund statt Ja oder Nein (M2)
+
+- **Kontext:** Die Sicherheitslogik in M3 und die Oberfläche in M9 müssen wissen, ob eine Rolle einen gültigen Wert hat, und wenn nicht, warum.
+- **Entscheidung:** `rof_sensor_registry_role()` liefert einen Status (`OK`, `UNASSIGNED`, `MISSING`, `READ_ERROR`, `DUPLICATE`) und schreibt die Temperatur nur bei `OK`. Ein Aufrufer kann einen ungültigen Wert so nicht versehentlich verwenden.
+- **Verworfen:** Ein `bool` mit Temperatur. Der Grund für den Fehler ginge verloren, und die Oberfläche könnte ihn nicht anzeigen.

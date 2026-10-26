@@ -14,6 +14,18 @@ Alle öffentlichen Bezeichner aus core tragen das Präfix `rof_` (Typen, Funktio
 | `GENERATOR` | `ROF_ROLE_SMOKE_GEN` | Raucherzeuger |
 | `NICHT_ZUGEORDNET` | `ROF_ROLE_UNASSIGNED` | |
 
+## Rollenstatus (SEN-05)
+
+Zustand einer Rolle, den die Sensorverwaltung meldet. Alles außer „in Ordnung“ ist für die Rolle ein Fehler.
+
+| Deutsch | Code | Bedeutung |
+|---|---|---|
+| in Ordnung | `ROF_ROLE_STATUS_OK` | Sensor gefunden und gelesen |
+| nicht zugeordnet | `ROF_ROLE_STATUS_UNASSIGNED` | kein Sensor hat die Rolle |
+| fehlt | `ROF_ROLE_STATUS_MISSING` | zugeordneter Sensor nicht gefunden |
+| Lesefehler | `ROF_ROLE_STATUS_READ_ERROR` | Sensor da, Messung fehlgeschlagen |
+| doppelt | `ROF_ROLE_STATUS_DUPLICATE` | ID mehrfach gemeldet, Wert nicht eindeutig |
+
 ## Zustände (CTL-04)
 
 | Deutsch (CLAUDE.md) | Code |
@@ -46,3 +58,5 @@ Alle öffentlichen Bezeichner aus core tragen das Präfix `rof_` (Typen, Funktio
 | Regelzyklus | `control_cycle` |
 | Sicherheitslogik | `safety` |
 | Sensorverwaltung | `sensor_registry` |
+| Rohwert | `raw_c` (Messwert ohne Offset) |
+| Überlauf | `overflow` (mehr Sensoren als Kanäle) |
