@@ -2,7 +2,7 @@
 
 Steuerungssoftware für einen Räucherofen auf einem ESP32-S3. Prüfungsleistung im IU-Modul „Projekt: Software Development“. Getestet wird mit DS18B20-Sensoren und einer LED statt Heizelement, ohne Netzspannung.
 
-Stand: Meilenstein M0 (Gerüst). Die vollständige Anleitung zu Bauen, Flashen und Testen folgt in M11.
+Stand: Meilenstein M1 (Interfaces). Die vollständige Anleitung zu Bauen, Flashen und Testen folgt in M11.
 
 ## Ordner
 
@@ -23,6 +23,8 @@ Stand: Meilenstein M0 (Gerüst). Die vollständige Anleitung zu Bauen, Flashen u
 brew install cmake ninja cppcheck gcovr
 ```
 
+Außerdem `python3` für die Prüfung der Include-Regeln. Es ist auf macOS vorinstalliert.
+
 ## Host-Build und Tests
 
 ```bash
@@ -32,7 +34,7 @@ ctest --test-dir build --output-on-failure
 cmake --build build --target cppcheck
 ```
 
-Dieselben Schritte laufen in CI (`.github/workflows/ci.yml`) bei jedem Push.
+ctest führt die Unity-Tests und die Prüfung der Include-Regeln (`test/include_rules/`) aus. Dieselben Schritte laufen in CI (`.github/workflows/ci.yml`) bei jedem Push.
 
 ## Dokumentation
 
@@ -40,6 +42,7 @@ Dieselben Schritte laufen in CI (`.github/workflows/ci.yml`) bei jedem Push.
 - `docs/entscheidungen.md`: Entscheidungen mit verworfenen Alternativen
 - `docs/zustandsautomat.md`: Zustände und Übergänge
 - `docs/api.yaml`: OpenAPI-Beschreibung der Schnittstelle
+- `docs/glossar.md`: deutsche Fachbegriffe und ihre englischen Namen im Code
 - `docs/ki_log.md`: Kennzeichnung der KI-Nutzung
 
 ## KI-Nutzung

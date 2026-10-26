@@ -6,9 +6,9 @@ Alle Anforderungen stammen aus `CLAUDE.md`. Jede hat eine feste ID aus Bereich u
 
 | ID | Anforderung | Meilenstein | Nachweis |
 |---|---|---|---|
-| ARC-01 | core ist reines C11: keine ESP-Header, kein FreeRTOS, kein malloc nach der Initialisierung | M1 | offen |
-| ARC-02 | core spricht nur über Interfaces: Temperatursensor (lesen, aufzählen), Ausgang (Tastgrad setzen), Uhr (Millisekunden), Speicher (laden, speichern), Log | M1 | offen |
-| ARC-03 | Die Zeit wird immer injiziert, nie direkt gelesen | M1 | offen |
+| ARC-01 | core ist reines C11: keine ESP-Header, kein FreeRTOS, kein malloc nach der Initialisierung | M1 | erfüllt für M1: ctest `include_rules` erlaubt in core nur eigene Header und sieben Standard-Header, also auch kein `stdlib.h` und damit kein malloc. Gegenproben `include_rules_detects_core_esp`, `_core_freertos`, `_core_stdlib`. C11 ohne Erweiterungen über `CMAKE_C_EXTENSIONS OFF` (E-003) |
+| ARC-02 | core spricht nur über Interfaces: Temperatursensor (lesen, aufzählen), Ausgang (Tastgrad setzen), Uhr (Millisekunden), Speicher (laden, speichern), Log | M1 | teilweise: Interfaces in `core/include`, Host-Implementierungen getestet in `test_platform_host`. Belegt ist die Anforderung erst, wenn core-Module nur diese Interfaces nutzen (ab M2) |
+| ARC-03 | Die Zeit wird immer injiziert, nie direkt gelesen | M1 | teilweise: `rof_clock_t`, `time.h` in core verboten (`include_rules_detects_core_time`). Nutzung durch core-Module ab M2 |
 | ARC-04 | Die Hardwareschicht kennt die Webseite nicht, die Webseite kennt nur die API, der Webserver bindet keine Treiber ein und ruft core nie direkt auf | M8 | offen |
 | ARC-05 | Befehle (Sollwert, Start, Stopp, Sensorrolle zuweisen, Reset) gehen ausschließlich über eine FreeRTOS-Queue an den Regeltask | M7 | offen |
 | ARC-06 | Der Regeltask validiert jeden Befehl selbst und verwirft ungültige | M7 | offen |
@@ -92,8 +92,8 @@ Alle Anforderungen stammen aus `CLAUDE.md`. Jede hat eine feste ID aus Bereich u
 
 | ID | Anforderung | Meilenstein | Nachweis |
 |---|---|---|---|
-| CI-01 | Host: CMake-Build, ctest, gcov für `core/safety`, cppcheck, Prüfung der Include-Regeln | M0, M1, M3 | teilweise: `.github/workflows/ci.yml`, Job `host` mit Build, ctest, cppcheck |
-| CI-02 | CI prüft, dass core und proto keinen ESP- oder FreeRTOS-Header einbinden und dass `firmware/net` keine Treiber einbindet. Bei Verstoß schlägt der Build fehl | M1 | offen |
+| CI-01 | Host: CMake-Build, ctest, gcov für `core/safety`, cppcheck, Prüfung der Include-Regeln | M0, M1, M3 | teilweise: `.github/workflows/ci.yml`, Job `host` mit Build, ctest (inklusive Include-Prüfung) und cppcheck. gcov folgt in M3 |
+| CI-02 | CI prüft, dass core und proto keinen ESP- oder FreeRTOS-Header einbinden und dass `firmware/net` keine Treiber einbindet. Bei Verstoß schlägt der Build fehl | M1, M8 | ctest `include_rules` mit sieben Gegenproben `include_rules_detects_*` und `include_rules_accepts_clean_tree`. Der Pfad `firmware/net` wird in M8 gegen die echte Struktur geprüft |
 | CI-03 | Web: `npm ci`, Lint, Typprüfung, Vitest, Build, Größenbudget | M9 | offen |
 | CI-04 | Firmware: `idf.py build` im Container `espressif/idf` mit fester Version | M7 | offen |
 
