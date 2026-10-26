@@ -50,3 +50,23 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 **Vom Nutzer geändert oder abgelehnt:**
 - Die Zeile `Co-Authored-By: Claude` in den Commit-Nachrichten. Auf Wunsch des Nutzers ist sie aus allen bisherigen Commits entfernt und wird nicht mehr gesetzt. Die KI-Nutzung ist stattdessen hier und in der README gekennzeichnet.
 - Weitere Änderungen trage ich nach dem Review von M1 nach.
+
+## 2026-10-26 – M2 Sensorverwaltung
+
+**Modell:** Claude Opus 5.5
+
+**Von der KI erzeugt:**
+- Plan für M2 mit Rückfragen zu Rollenkonflikt, Offset-Grenzen, Pushen und Aufräumen
+- Sensorverwaltung `core/include/rof_sensor_registry.h` und `core/sensors/rof_sensor_registry.c`, testgetrieben in sieben Schritten: jeweils erst die Tests mit rotem Lauf, dann die Implementierung, danach ein reines Refactoring
+- 48 Unity-Tests in `test/test_sensor_registry.c`
+- CMake-Target `rof_core_interfaces`, damit Mocks nur die Interfaces kennen; Mock-Sensorbus auf 24 Plätze erweitert
+- Entscheidungen E-011 bis E-015, Rollenstatus im Glossar, Nachweise für SEN-01 bis SEN-07
+
+**Vom Nutzer entschieden:**
+- Eine vergebene Rolle wird verschoben statt abgelehnt
+- Kalibrieroffset ±5 °C
+- Claude pusht nach jedem Meilenstein selbst, nie mit force, und prüft die CI
+- Die lokale Sicherung der alten Historie wird gelöscht
+- Plan für M2 ohne Änderungen freigegeben
+
+**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M2 ergänzt.
