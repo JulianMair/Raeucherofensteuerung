@@ -7,7 +7,10 @@
 #include "unity.h"
 
 #include "fake_clock.h"
+#include "mock_output.h"
 #include "mock_temp_sensor.h"
+
+#include <math.h>
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -194,6 +197,56 @@ static void test_mock_sensor_unknown_id_is_not_found(void)
                       mock_temp_sensor_set_read_status(&bus_mock, ID_A, ROF_ERR_IO));
 }
 
+/* ---- Mock-Ausgang ------------------------------------------------------ */
+
+static mock_output_t heater_mock;
+static rof_output_t heater;
+
+static void heater_setup(void)
+{
+    mock_output_init(&heater_mock);
+    heater = mock_output_interface(&heater_mock);
+}
+
+static void test_mock_output_starts_off(void)
+{
+    heater_setup();
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, heater_mock.duty);
+    TEST_ASSERT_EQUAL_UINT(0, heater_mock.set_calls);
+}
+
+static void test_mock_output_records_last_duty(void)
+{
+    heater_setup();
+    TEST_ASSERT_EQUAL(ROF_OK, rof_output_set_duty(&heater, 0.25f));
+    TEST_ASSERT_EQUAL(ROF_OK, rof_output_set_duty(&heater, 0.75f));
+
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.75f, heater_mock.duty);
+    TEST_ASSERT_EQUAL_UINT(2, heater_mock.set_calls);
+}
+
+static void test_mock_output_accepts_bounds(void)
+{
+    heater_setup();
+    TEST_ASSERT_EQUAL(ROF_OK, rof_output_set_duty(&heater, 1.0f));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 1.0f, heater_mock.duty);
+    TEST_ASSERT_EQUAL(ROF_OK, rof_output_set_duty(&heater, 0.0f));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, heater_mock.duty);
+}
+
+static void test_mock_output_rejects_invalid_duty_and_keeps_last(void)
+{
+    heater_setup();
+    TEST_ASSERT_EQUAL(ROF_OK, rof_output_set_duty(&heater, 0.5f));
+
+    TEST_ASSERT_EQUAL(ROF_ERR_INVALID_ARG, rof_output_set_duty(&heater, -0.1f));
+    TEST_ASSERT_EQUAL(ROF_ERR_INVALID_ARG, rof_output_set_duty(&heater, 1.1f));
+    TEST_ASSERT_EQUAL(ROF_ERR_INVALID_ARG, rof_output_set_duty(&heater, NAN));
+
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.5f, heater_mock.duty);
+    TEST_ASSERT_EQUAL_UINT(4, heater_mock.set_calls);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -212,6 +265,11 @@ int main(void)
     RUN_TEST(test_mock_sensor_allows_duplicate_ids);
     RUN_TEST(test_mock_sensor_rejects_plug_when_full);
     RUN_TEST(test_mock_sensor_unknown_id_is_not_found);
+
+    RUN_TEST(test_mock_output_starts_off);
+    RUN_TEST(test_mock_output_records_last_duty);
+    RUN_TEST(test_mock_output_accepts_bounds);
+    RUN_TEST(test_mock_output_rejects_invalid_duty_and_keeps_last);
 
     return UNITY_END();
 }
