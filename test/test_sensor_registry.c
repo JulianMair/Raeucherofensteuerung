@@ -146,7 +146,6 @@ static void test_replugged_sensor_gets_a_channel_again(void)
     mock_temp_sensor_plug(&bus_mock, ID_A, "DS18B20", 20.0f);
     rof_sensor_registry_update(&reg);
 
-    TEST_ASSERT_NOT_NULL(channel_of(ID_A));
     TEST_ASSERT_TRUE(existing_channel(ID_A)->present);
 }
 
@@ -258,7 +257,6 @@ static void test_unplugged_sensor_with_offset_keeps_channel(void)
     rof_sensor_registry_update(&reg);
 
     const rof_sensor_channel_t *a = existing_channel(ID_A);
-    TEST_ASSERT_NOT_NULL(a);
     TEST_ASSERT_FALSE(a->present);
     TEST_ASSERT_EQUAL(ROF_ERR_NOT_FOUND, a->read_status);
 }
@@ -392,7 +390,6 @@ static void test_unplugged_assigned_sensor_keeps_channel(void)
     mock_temp_sensor_unplug(&bus_mock, ID_A);
     rof_sensor_registry_update(&reg);
 
-    TEST_ASSERT_NOT_NULL(channel_of(ID_A));
     TEST_ASSERT_FALSE(existing_channel(ID_A)->present);
 }
 
