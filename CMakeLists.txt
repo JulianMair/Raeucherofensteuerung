@@ -17,3 +17,22 @@ target_compile_options(project_warnings INTERFACE -Wall -Wextra -Wpedantic -Werr
 
 enable_testing()
 add_subdirectory(test)
+
+# Statische Analyse: cmake --build build --target cppcheck
+# Prüft alle Dateien aus compile_commands.json, Unity ausgenommen.
+find_program(CPPCHECK_EXE cppcheck)
+if(CPPCHECK_EXE)
+    add_custom_target(cppcheck
+        COMMAND ${CPPCHECK_EXE}
+            --project=${CMAKE_BINARY_DIR}/compile_commands.json
+            --std=c11
+            --enable=warning,style,performance,portability
+            --inline-suppr
+            --error-exitcode=1
+            --quiet
+            -i ${CMAKE_SOURCE_DIR}/test/vendor
+            --suppress=*:*/test/vendor/*
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        VERBATIM
+        USES_TERMINAL)
+endif()

@@ -1,0 +1,30 @@
+# CI für den Host-Build: Bauen, Unity-Tests, statische Analyse.
+# Jobs für Web und Firmware kommen in späteren Meilensteinen dazu.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  host:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Werkzeuge installieren
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build cppcheck
+
+      - name: Konfigurieren
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Bauen
+        run: cmake --build build
+
+      - name: Tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: cppcheck
+        run: cmake --build build --target cppcheck
