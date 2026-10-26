@@ -9,6 +9,8 @@
 #include "mock_temp_sensor.h"
 #include "rof_sensor_registry.h"
 
+#include <math.h>
+
 #define ID_A 0x28AA000000000001ULL
 #define ID_B 0x28BB000000000002ULL
 #define ID_C 0x28CC000000000003ULL
@@ -159,6 +161,98 @@ static void test_channel_index_out_of_range_is_null(void)
     TEST_ASSERT_NULL(rof_sensor_registry_channel(&reg, 1));
 }
 
+/* ---- Messwerte und Kalibrieroffset -------------------------------------- */
+
+/* SEN-01 */
+static void test_update_reads_temperatures(void)
+{
+    mock_temp_sensor_plug(&bus_mock, ID_A, "DS18B20", 20.5f);
+
+    rof_sensor_registry_update(&reg);
+
+    const rof_sensor_channel_t *a = channel_of(ID_A);
+    TEST_ASSERT_EQUAL(ROF_OK, a->read_status);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 20.5f, a->raw_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 20.5f, a->temp_c);
+}
+
+/* SEN-01 */
+static void test_offset_is_added_to_reading(void)
+{
+    mock_temp_sensor_plug(&bus_mock, ID_A, "DS18B20", 20.0f);
+    rof_sensor_registry_update(&reg);
+
+    TEST_ASSERT_EQUAL(ROF_OK, rof_sensor_registry_set_offset(&reg, ID_A, -1.5f));
+    rof_sensor_registry_update(&reg);
+
+    const rof_sensor_channel_t *a = channel_of(ID_A);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, -1.5f, a->offset_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 20.0f, a->raw_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 18.5f, a->temp_c);
+}
+
+/* SEN-01: ein neuer Offset wirkt sofort, nicht erst beim nächsten update() */
+static void test_offset_change_applies_immediately(void)
+{
+    mock_temp_sensor_plug(&bus_mock, ID_A, "DS18B20", 20.0f);
+    rof_sensor_registry_update(&reg);
+
+    rof_sensor_registry_set_offset(&reg, ID_A, 2.0f);
+
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 22.0f, channel_of(ID_A)->temp_c);
+}
+
+/* SEN-01, E-014: ±5 °C erlaubt, alles andere abgelehnt statt begrenzt */
+static void test_offset_outside_limits_is_rejected(void)
+{
+    mock_temp_sensor_plug(&bus_mock, ID_A, "DS18B20", 20.0f);
+    rof_sensor_registry_update(&reg);
+
+    TEST_ASSERT_EQUAL(ROF_OK, rof_sensor_registry_set_offset(&reg, ID_A, 5.0f));
+    TEST_ASSERT_EQUAL(ROF_OK, rof_sensor_registry_set_offset(&reg, ID_A, -5.0f));
+    TEST_ASSERT_EQUAL(ROF_ERR_INVALID_ARG, rof_sensor_registry_set_offset(&reg, ID_A, 5.01f));
+    TEST_ASSERT_EQUAL(ROF_ERR_INVALID_ARG, rof_sensor_registry_set_offset(&reg, ID_A, -5.01f));
+    TEST_ASSERT_EQUAL(ROF_ERR_INVALID_ARG, rof_sensor_registry_set_offset(&reg, ID_A, NAN));
+
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, -5.0f, channel_of(ID_A)->offset_c);
+}
+
+static void test_offset_for_unknown_sensor_is_not_found(void)
+{
+    TEST_ASSERT_EQUAL(ROF_ERR_NOT_FOUND, rof_sensor_registry_set_offset(&reg, ID_A, 1.0f));
+}
+
+/* Ein Lesefehler überschreibt den letzten gültigen Wert nicht */
+static void test_read_error_keeps_last_value(void)
+{
+    mock_temp_sensor_plug(&bus_mock, ID_A, "DS18B20", 20.0f);
+    rof_sensor_registry_update(&reg);
+
+    mock_temp_sensor_set_read_status(&bus_mock, ID_A, ROF_ERR_IO);
+    mock_temp_sensor_set_temp(&bus_mock, ID_A, 99.0f);
+    rof_sensor_registry_update(&reg);
+
+    const rof_sensor_channel_t *a = channel_of(ID_A);
+    TEST_ASSERT_EQUAL(ROF_ERR_IO, a->read_status);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 20.0f, a->temp_c);
+}
+
+/* Ein Sensor mit Offset behält seinen Kanal, auch wenn er abgezogen wird */
+static void test_unplugged_sensor_with_offset_keeps_channel(void)
+{
+    mock_temp_sensor_plug(&bus_mock, ID_A, "DS18B20", 20.0f);
+    rof_sensor_registry_update(&reg);
+    rof_sensor_registry_set_offset(&reg, ID_A, 1.0f);
+
+    mock_temp_sensor_unplug(&bus_mock, ID_A);
+    rof_sensor_registry_update(&reg);
+
+    const rof_sensor_channel_t *a = channel_of(ID_A);
+    TEST_ASSERT_NOT_NULL(a);
+    TEST_ASSERT_FALSE(a->present);
+    TEST_ASSERT_EQUAL(ROF_ERR_NOT_FOUND, a->read_status);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -172,6 +266,14 @@ int main(void)
     RUN_TEST(test_replugged_sensor_gets_a_channel_again);
     RUN_TEST(test_bus_error_is_logged_and_sensors_count_as_absent);
     RUN_TEST(test_channel_index_out_of_range_is_null);
+
+    RUN_TEST(test_update_reads_temperatures);
+    RUN_TEST(test_offset_is_added_to_reading);
+    RUN_TEST(test_offset_change_applies_immediately);
+    RUN_TEST(test_offset_outside_limits_is_rejected);
+    RUN_TEST(test_offset_for_unknown_sensor_is_not_found);
+    RUN_TEST(test_read_error_keeps_last_value);
+    RUN_TEST(test_unplugged_sensor_with_offset_keeps_channel);
 
     return UNITY_END();
 }

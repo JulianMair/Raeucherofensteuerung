@@ -25,6 +25,8 @@
 /* So viele Sensoren fragt update() je Treiber ab. Mehr als Kanäle, damit
  * zugeordnete Sensoren auch dann gefunden werden, wenn zu viele stecken. */
 #define ROF_SENSOR_SCAN_MAX 16
+/* Erlaubter Kalibrieroffset in °C nach beiden Seiten (E-014) */
+#define ROF_SENSOR_OFFSET_MAX_C 5.0f
 
 /* Rollen (SEN-02). Die deutschen Begriffe stehen in docs/glossar.md. */
 typedef enum {
@@ -40,8 +42,12 @@ typedef struct {
     rof_sensor_id_t id;
     const char *type; /* vom Treiber gemeldeter Sensortyp */
     rof_role_t role;
+    float offset_c;                  /* Kalibrieroffset, wird zum Rohwert addiert */
     bool present;                    /* beim letzten update() gemeldet */
     const rof_temp_sensor_t *driver; /* Treiber, der den Sensor zuletzt gemeldet hat */
+    rof_status_t read_status;        /* Ergebnis des letzten Lesens, ROF_ERR_NOT_FOUND wenn nicht vorhanden */
+    float raw_c;                     /* letzter gültiger Rohwert des Treibers */
+    float temp_c;                    /* raw_c + offset_c */
 } rof_sensor_channel_t;
 
 typedef struct {
@@ -63,8 +69,15 @@ rof_status_t rof_sensor_registry_init(rof_sensor_registry_t *reg,
                                       size_t driver_count, const rof_storage_t *storage,
                                       const rof_log_t *logger);
 
-/* Fragt alle Treiber ab und gleicht die Kanäle ab. */
+/* Fragt alle Treiber ab, gleicht die Kanäle ab und liest jeden
+ * vorhandenen Sensor. Ein Lesefehler lässt den letzten gültigen Wert stehen. */
 void rof_sensor_registry_update(rof_sensor_registry_t *reg);
+
+/* Setzt den Kalibrieroffset eines bekannten Sensors. Er wirkt sofort.
+ * ROF_ERR_INVALID_ARG: offset_c außerhalb von ±ROF_SENSOR_OFFSET_MAX_C oder NaN.
+ * ROF_ERR_NOT_FOUND: kein Kanal mit dieser ID. */
+rof_status_t rof_sensor_registry_set_offset(rof_sensor_registry_t *reg, rof_sensor_id_t id,
+                                            float offset_c);
 
 size_t rof_sensor_registry_channel_count(const rof_sensor_registry_t *reg);
 
