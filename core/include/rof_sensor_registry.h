@@ -27,6 +27,8 @@
 #define ROF_SENSOR_SCAN_MAX 16
 /* Erlaubter Kalibrieroffset in °C nach beiden Seiten (E-014) */
 #define ROF_SENSOR_OFFSET_MAX_C 5.0f
+/* Schlüssel, unter dem Rollen und Offsets gespeichert werden (SEN-04) */
+#define ROF_SENSOR_STORAGE_KEY "sensor_roles"
 
 /* Rollen (SEN-02). Die deutschen Begriffe stehen in docs/glossar.md. */
 typedef enum {
@@ -73,9 +75,20 @@ rof_status_t rof_sensor_registry_init(rof_sensor_registry_t *reg,
  * vorhandenen Sensor. Ein Lesefehler lässt den letzten gültigen Wert stehen. */
 void rof_sensor_registry_update(rof_sensor_registry_t *reg);
 
-/* Setzt den Kalibrieroffset eines bekannten Sensors. Er wirkt sofort.
+/* Weist einem bekannten Sensor eine Rolle zu und speichert sofort (SEN-04).
+ * Hat ein anderer Sensor die Rolle, verliert er sie (E-014).
+ * ROF_ROLE_UNASSIGNED löst die Rolle des Sensors.
+ * ROF_ERR_INVALID_ARG: keine gültige Rolle. ROF_ERR_NOT_FOUND: kein Kanal mit dieser ID.
+ * Schlägt das Speichern fehl, bleibt alles wie vorher und der Fehler des
+ * Speichers wird zurückgegeben. */
+rof_status_t rof_sensor_registry_assign(rof_sensor_registry_t *reg, rof_sensor_id_t id,
+                                        rof_role_t role);
+
+/* Setzt den Kalibrieroffset eines bekannten Sensors und speichert sofort.
+ * Er wirkt ohne Warten auf das nächste update().
  * ROF_ERR_INVALID_ARG: offset_c außerhalb von ±ROF_SENSOR_OFFSET_MAX_C oder NaN.
- * ROF_ERR_NOT_FOUND: kein Kanal mit dieser ID. */
+ * ROF_ERR_NOT_FOUND: kein Kanal mit dieser ID.
+ * Schlägt das Speichern fehl, bleibt der alte Offset. */
 rof_status_t rof_sensor_registry_set_offset(rof_sensor_registry_t *reg, rof_sensor_id_t id,
                                             float offset_c);
 

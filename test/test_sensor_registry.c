@@ -253,6 +253,139 @@ static void test_unplugged_sensor_with_offset_keeps_channel(void)
     TEST_ASSERT_EQUAL(ROF_ERR_NOT_FOUND, a->read_status);
 }
 
+/* ---- Rollen zuweisen und speichern -------------------------------------- */
+
+static void plug_and_update(rof_sensor_id_t id, float temp_c)
+{
+    mock_temp_sensor_plug(&bus_mock, id, "DS18B20", temp_c);
+    rof_sensor_registry_update(&reg);
+}
+
+/* SEN-02, SEN-04 */
+static void test_assign_sets_role_and_saves(void)
+{
+    plug_and_update(ID_A, 20.0f);
+
+    TEST_ASSERT_EQUAL(ROF_OK, rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_CHAMBER));
+
+    TEST_ASSERT_EQUAL(ROF_ROLE_CHAMBER, channel_of(ID_A)->role);
+    TEST_ASSERT_EQUAL_UINT(1, flash_mock.save_calls);
+}
+
+/* SEN-02 */
+static void test_all_roles_can_be_assigned_to_different_sensors(void)
+{
+    const rof_role_t roles[] = { ROF_ROLE_CHAMBER, ROF_ROLE_PROBE_1, ROF_ROLE_PROBE_2,
+                                 ROF_ROLE_SMOKE_GEN };
+    for (rof_sensor_id_t id = 1; id <= 4; id++) {
+        plug_and_update(id, 20.0f);
+        TEST_ASSERT_EQUAL(ROF_OK, rof_sensor_registry_assign(&reg, id, roles[id - 1]));
+    }
+    for (rof_sensor_id_t id = 1; id <= 4; id++) {
+        TEST_ASSERT_EQUAL(roles[id - 1], channel_of(id)->role);
+    }
+}
+
+/* SEN-02, E-014: eine vergebene Rolle wird verschoben */
+static void test_assign_moves_role_from_previous_sensor(void)
+{
+    plug_and_update(ID_A, 20.0f);
+    plug_and_update(ID_B, 21.0f);
+    rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_CHAMBER);
+
+    TEST_ASSERT_EQUAL(ROF_OK, rof_sensor_registry_assign(&reg, ID_B, ROF_ROLE_CHAMBER));
+
+    TEST_ASSERT_EQUAL(ROF_ROLE_UNASSIGNED, channel_of(ID_A)->role);
+    TEST_ASSERT_EQUAL(ROF_ROLE_CHAMBER, channel_of(ID_B)->role);
+}
+
+/* SEN-02 */
+static void test_assign_unassigned_releases_role(void)
+{
+    plug_and_update(ID_A, 20.0f);
+    rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_PROBE_1);
+
+    TEST_ASSERT_EQUAL(ROF_OK, rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_UNASSIGNED));
+
+    TEST_ASSERT_EQUAL(ROF_ROLE_UNASSIGNED, channel_of(ID_A)->role);
+}
+
+static void test_assign_rejects_unknown_sensor(void)
+{
+    TEST_ASSERT_EQUAL(ROF_ERR_NOT_FOUND, rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_CHAMBER));
+    TEST_ASSERT_EQUAL_UINT(0, flash_mock.save_calls);
+}
+
+static void test_assign_rejects_invalid_role(void)
+{
+    plug_and_update(ID_A, 20.0f);
+
+    TEST_ASSERT_EQUAL(ROF_ERR_INVALID_ARG, rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_COUNT));
+    TEST_ASSERT_EQUAL(ROF_ERR_INVALID_ARG, rof_sensor_registry_assign(&reg, ID_A, (rof_role_t)99));
+    TEST_ASSERT_EQUAL(ROF_ROLE_UNASSIGNED, channel_of(ID_A)->role);
+}
+
+/* SEN-04: Was nicht gespeichert werden kann, gilt auch im RAM nicht */
+static void test_assign_is_undone_when_saving_fails(void)
+{
+    plug_and_update(ID_A, 20.0f);
+    plug_and_update(ID_B, 21.0f);
+    rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_CHAMBER);
+    mock_storage_set_save_status(&flash_mock, ROF_ERR_IO);
+
+    TEST_ASSERT_EQUAL(ROF_ERR_IO, rof_sensor_registry_assign(&reg, ID_B, ROF_ROLE_CHAMBER));
+
+    TEST_ASSERT_EQUAL(ROF_ROLE_CHAMBER, channel_of(ID_A)->role);
+    TEST_ASSERT_EQUAL(ROF_ROLE_UNASSIGNED, channel_of(ID_B)->role);
+}
+
+/* SEN-04 */
+static void test_offset_is_saved_and_undone_when_saving_fails(void)
+{
+    plug_and_update(ID_A, 20.0f);
+    TEST_ASSERT_EQUAL(ROF_OK, rof_sensor_registry_set_offset(&reg, ID_A, 1.0f));
+    TEST_ASSERT_EQUAL_UINT(1, flash_mock.save_calls);
+
+    mock_storage_set_save_status(&flash_mock, ROF_ERR_IO);
+    TEST_ASSERT_EQUAL(ROF_ERR_IO, rof_sensor_registry_set_offset(&reg, ID_A, 3.0f));
+
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 1.0f, channel_of(ID_A)->offset_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 21.0f, channel_of(ID_A)->temp_c);
+}
+
+/* SEN-04: Format Version 1 = Version, Anzahl, je Eintrag ID (8), Rolle (1), Offset (4) */
+static void test_saved_block_has_version_count_and_entries(void)
+{
+    plug_and_update(ID_A, 20.0f);
+    plug_and_update(ID_B, 21.0f);
+    rof_sensor_registry_assign(&reg, ID_B, ROF_ROLE_PROBE_2);
+    uint8_t buf[128];
+    size_t len = 0;
+
+    TEST_ASSERT_EQUAL(ROF_OK, rof_storage_load(&flash, ROF_SENSOR_STORAGE_KEY, buf, sizeof(buf), &len));
+
+    /* ID_A hat weder Rolle noch Offset und wird nicht gespeichert */
+    TEST_ASSERT_EQUAL_size_t(2 + 13, len);
+    TEST_ASSERT_EQUAL_UINT8(1, buf[0]);
+    TEST_ASSERT_EQUAL_UINT8(1, buf[1]);
+    TEST_ASSERT_EQUAL_UINT8(0x02, buf[2]); /* niederwertigstes Byte von ID_B zuerst */
+    TEST_ASSERT_EQUAL_UINT8(0x28, buf[9]);
+    TEST_ASSERT_EQUAL_UINT8(ROF_ROLE_PROBE_2, buf[10]);
+}
+
+/* SEN-05 Vorbereitung: ein zugeordneter Sensor behält seinen Kanal, wenn er fehlt */
+static void test_unplugged_assigned_sensor_keeps_channel(void)
+{
+    plug_and_update(ID_A, 20.0f);
+    rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_CHAMBER);
+
+    mock_temp_sensor_unplug(&bus_mock, ID_A);
+    rof_sensor_registry_update(&reg);
+
+    TEST_ASSERT_NOT_NULL(channel_of(ID_A));
+    TEST_ASSERT_FALSE(channel_of(ID_A)->present);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -274,6 +407,17 @@ int main(void)
     RUN_TEST(test_offset_for_unknown_sensor_is_not_found);
     RUN_TEST(test_read_error_keeps_last_value);
     RUN_TEST(test_unplugged_sensor_with_offset_keeps_channel);
+
+    RUN_TEST(test_assign_sets_role_and_saves);
+    RUN_TEST(test_all_roles_can_be_assigned_to_different_sensors);
+    RUN_TEST(test_assign_moves_role_from_previous_sensor);
+    RUN_TEST(test_assign_unassigned_releases_role);
+    RUN_TEST(test_assign_rejects_unknown_sensor);
+    RUN_TEST(test_assign_rejects_invalid_role);
+    RUN_TEST(test_assign_is_undone_when_saving_fails);
+    RUN_TEST(test_offset_is_saved_and_undone_when_saving_fails);
+    RUN_TEST(test_saved_block_has_version_count_and_entries);
+    RUN_TEST(test_unplugged_assigned_sensor_keeps_channel);
 
     return UNITY_END();
 }

@@ -1,6 +1,39 @@
 #include "rof_sensor_registry.h"
 
+#include <stdint.h>
 #include <string.h>
+
+/*
+ * Speicherformat Version 1 (E-012), Byte für Byte statt Struct-Kopie:
+ *   Byte 0          Version
+ *   Byte 1          Anzahl n der Einträge
+ *   je Eintrag 13 Byte:
+ *     ID     8 Byte, niederwertigstes Byte zuerst
+ *     Rolle  1 Byte
+ *     Offset 4 Byte, Bitmuster des float, niederwertigstes Byte zuerst
+ */
+#define STORE_VERSION 1u
+#define STORE_HEADER_SIZE 2u
+#define STORE_ENTRY_SIZE 13u
+#define STORE_MAX_SIZE (STORE_HEADER_SIZE + ROF_SENSOR_CHANNELS_MAX * STORE_ENTRY_SIZE)
+
+_Static_assert(sizeof(float) == 4, "Das Speicherformat setzt einen 32-Bit-float voraus");
+
+static void put_u64(uint8_t *dst, uint64_t value)
+{
+    for (unsigned i = 0; i < 8; i++) {
+        dst[i] = (uint8_t)(value >> (8u * i));
+    }
+}
+
+static void put_f32(uint8_t *dst, float value)
+{
+    uint32_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    for (unsigned i = 0; i < 4; i++) {
+        dst[i] = (uint8_t)(bits >> (8u * i));
+    }
+}
 
 static bool driver_is_valid(const rof_temp_sensor_t *driver)
 {
@@ -11,6 +44,16 @@ static rof_sensor_channel_t *find_channel(rof_sensor_registry_t *reg, rof_sensor
 {
     for (size_t i = 0; i < reg->channel_count; i++) {
         if (reg->channels[i].id == id) {
+            return &reg->channels[i];
+        }
+    }
+    return NULL;
+}
+
+static rof_sensor_channel_t *find_role(rof_sensor_registry_t *reg, rof_role_t role)
+{
+    for (size_t i = 0; i < reg->channel_count; i++) {
+        if (reg->channels[i].role == role) {
             return &reg->channels[i];
         }
     }
@@ -70,10 +113,42 @@ static bool offset_is_valid(float offset_c)
     return offset_c >= -ROF_SENSOR_OFFSET_MAX_C && offset_c <= ROF_SENSOR_OFFSET_MAX_C;
 }
 
+static bool role_is_valid(rof_role_t role)
+{
+    return (unsigned)role < (unsigned)ROF_ROLE_COUNT;
+}
+
+/* Rolle oder Offset: Nur solche Kanäle werden gespeichert. */
+static bool channel_has_settings(const rof_sensor_channel_t *ch)
+{
+    return ch->role != ROF_ROLE_UNASSIGNED || ch->offset_c != 0.0f;
+}
+
 /* Ein Kanal bleibt, solange der Sensor steckt oder Einstellungen trägt. */
 static bool channel_in_use(const rof_sensor_channel_t *ch)
 {
-    return ch->present || ch->offset_c != 0.0f;
+    return ch->present || channel_has_settings(ch);
+}
+
+static rof_status_t save_settings(const rof_sensor_registry_t *reg)
+{
+    uint8_t buf[STORE_MAX_SIZE];
+    size_t len = STORE_HEADER_SIZE;
+    uint8_t count = 0;
+    for (size_t i = 0; i < reg->channel_count; i++) {
+        const rof_sensor_channel_t *ch = &reg->channels[i];
+        if (!channel_has_settings(ch)) {
+            continue;
+        }
+        put_u64(&buf[len], ch->id);
+        buf[len + 8] = (uint8_t)ch->role;
+        put_f32(&buf[len + 9], ch->offset_c);
+        len += STORE_ENTRY_SIZE;
+        count++;
+    }
+    buf[0] = STORE_VERSION;
+    buf[1] = count;
+    return rof_storage_save(reg->storage, ROF_SENSOR_STORAGE_KEY, buf, len);
 }
 
 /* Entfernt Kanäle, die nicht mehr gebraucht werden. Die Reihenfolge der
@@ -139,8 +214,47 @@ rof_status_t rof_sensor_registry_set_offset(rof_sensor_registry_t *reg, rof_sens
     if (ch == NULL) {
         return ROF_ERR_NOT_FOUND;
     }
+    const float old_offset_c = ch->offset_c;
     ch->offset_c = offset_c;
+    rof_status_t status = save_settings(reg);
+    if (status != ROF_OK) {
+        ch->offset_c = old_offset_c;
+        return status;
+    }
     ch->temp_c = ch->raw_c + offset_c;
+    return ROF_OK;
+}
+
+rof_status_t rof_sensor_registry_assign(rof_sensor_registry_t *reg, rof_sensor_id_t id,
+                                        rof_role_t role)
+{
+    if (!role_is_valid(role)) {
+        return ROF_ERR_INVALID_ARG;
+    }
+    rof_sensor_channel_t *ch = find_channel(reg, id);
+    if (ch == NULL) {
+        return ROF_ERR_NOT_FOUND;
+    }
+
+    /* Bisherigen Inhaber der Rolle merken, damit beides zurückgenommen werden kann. */
+    rof_sensor_channel_t *previous = NULL;
+    if (role != ROF_ROLE_UNASSIGNED) {
+        previous = find_role(reg, role);
+    }
+    const rof_role_t old_role = ch->role;
+    if (previous != NULL) {
+        previous->role = ROF_ROLE_UNASSIGNED;
+    }
+    ch->role = role;
+
+    rof_status_t status = save_settings(reg);
+    if (status != ROF_OK) {
+        ch->role = old_role;
+        if (previous != NULL) {
+            previous->role = role;
+        }
+        return status;
+    }
     return ROF_OK;
 }
 
