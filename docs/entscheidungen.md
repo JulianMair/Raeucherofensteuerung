@@ -68,3 +68,17 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
 - **Kontext:** SEN-01 verlangt je Kanal eine eindeutige ID und einen Typ. Ein neuer Sensortyp soll nur als Treiber hinzukommen, ohne Änderung in core (SEN-06).
 - **Entscheidung:** Die ID ist ein `uint64_t`, in den die ROM-Adresse des DS18B20 genau passt. Den Typ liefert der Treiber als konstanten Text, z. B. `"DS18B20"`. core speichert und meldet ihn, wertet ihn aber nie aus.
 - **Verworfen:** Ein Enum mit allen Sensortypen in core. Jeder neue Typ hätte dann eine Änderung in core bedeutet.
+
+## E-010 Include-Regeln als Positivliste, geprüft per ctest (M1)
+
+- **Kontext:** CI soll prüfen, dass core und proto keine ESP- oder FreeRTOS-Header einbinden und dass firmware/net keine Treiber einbindet (CI-02). Bei einem Verstoß soll der Lauf fehlschlagen.
+- **Entscheidung:**
+  - Ein Python-Skript ohne Fremdpakete (`test/include_rules/check_includes.py`) läuft als ctest-Test. Damit prüft es lokal und in CI dasselbe, `ci.yml` bleibt unverändert.
+  - core hat eine Positivliste: nur eigene Header und sieben Standard-Header. Weil `stdlib.h` fehlt, kann core kein `malloc` aufrufen. Ein Aufruf ohne Deklaration ist in C11 mit `-Werror` ein Fehler. Damit gilt für core „gar kein malloc“, strenger als „kein malloc nach der Initialisierung“ (ARC-01). Weil `time.h` fehlt, kann core die Zeit nur über `rof_clock_t` lesen (ARC-03). Weil `stdio.h` fehlt, gibt core Meldungen nur über `rof_log_t` aus.
+  - proto darf die ganze C-Standardbibliothek, eigene Header und `core/include` einbinden. Das wird in M6 nachgeschärft.
+  - firmware/net darf weder ESP-IDF-Treiber (`driver/…`) noch Header aus `platform/esp32` einbinden. Der Pfad wird in M8 an die echte Ordnerstruktur angepasst.
+  - Gegenproben: Kleine Testordner mit je einem absichtlichen Verstoß. ctest prüft dort die genaue Meldung, nicht nur den Exit-Code.
+- **Verworfen:**
+  - Eine Negativliste (`esp_*`, `freertos/*`): Sie übersieht jeden Header, an den niemand gedacht hat.
+  - `grep` direkt in `ci.yml`: läuft lokal nicht mit und ist schwer zu testen.
+  - Sich darauf verlassen, dass ESP-Header auf dem Host fehlen: Das deckt Dateien außerhalb des Host-Builds und firmware/net nicht ab.
