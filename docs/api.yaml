@@ -1,0 +1,6 @@
+# Einzige Quelle für die Schnittstelle (API-01). Inhalt folgt in M6.
+openapi: 3.1.0
+info:
+  title: Räucherofensteuerung API
+  version: 0.0.0
+paths: {}
