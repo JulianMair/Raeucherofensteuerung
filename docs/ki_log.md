@@ -22,4 +22,9 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 - Werkzeuge installiert der Nutzer selbst
 - Anforderungen bekommen schon in M0 IDs
 
-**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M0 ergänzt.
+**Vom Nutzer geändert oder abgelehnt:**
+- Den vorgeschlagenen CI-Nachbau in einem Docker-Container (`ubuntu:24.04`) abgelehnt. Geprüft wird lokal mit clang und über GitHub Actions mit GCC.
+- Das GitHub-Repo selbst angelegt und `main` selbst gepusht, ohne die vorgeschlagene gh-CLI. Das Repo ist öffentlich statt wie empfohlen privat.
+- Am erzeugten Code und an der Doku nichts geändert.
+
+**Ergebnis:** Der erste CI-Lauf auf GitHub (Job `host`) war grün.
