@@ -529,6 +529,116 @@ static void test_corrupt_stored_blocks_are_discarded(void)
     check_block_is_discarded(blob, 2 + 2 * 13);
 }
 
+/* ---- Rollenstatus ------------------------------------------------------- */
+
+/* SEN-05 */
+static void test_role_without_sensor_is_unassigned(void)
+{
+    float temp_c = -1.0f;
+
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_UNASSIGNED, rof_sensor_registry_role(&reg, ROF_ROLE_CHAMBER, &temp_c));
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_UNASSIGNED, rof_sensor_registry_role(&reg, ROF_ROLE_UNASSIGNED, &temp_c));
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_UNASSIGNED, rof_sensor_registry_role(&reg, (rof_role_t)99, &temp_c));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, -1.0f, temp_c);
+}
+
+/* SEN-05 */
+static void test_role_reports_temperature_with_offset(void)
+{
+    plug_and_update(ID_A, 80.0f);
+    rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_CHAMBER);
+    rof_sensor_registry_set_offset(&reg, ID_A, -0.5f);
+    float temp_c = 0.0f;
+
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_OK, rof_sensor_registry_role(&reg, ROF_ROLE_CHAMBER, &temp_c));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 79.5f, temp_c);
+}
+
+/* SEN-05: fehlt ein zugeordneter Sensor, meldet seine Rolle einen Fehler */
+static void test_missing_assigned_sensor_reports_missing(void)
+{
+    plug_and_update(ID_A, 80.0f);
+    rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_CHAMBER);
+    mock_temp_sensor_unplug(&bus_mock, ID_A);
+    rof_sensor_registry_update(&reg);
+    float temp_c = -1.0f;
+
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_MISSING, rof_sensor_registry_role(&reg, ROF_ROLE_CHAMBER, &temp_c));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, -1.0f, temp_c);
+}
+
+/* SEN-05: gemeldet wird einmal je Ausfall, nicht bei jedem update() */
+static void test_missing_sensor_is_logged_once_per_loss(void)
+{
+    plug_and_update(ID_A, 80.0f);
+    rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_CHAMBER);
+
+    mock_temp_sensor_unplug(&bus_mock, ID_A);
+    rof_sensor_registry_update(&reg);
+    rof_sensor_registry_update(&reg);
+    TEST_ASSERT_EQUAL_UINT(1, log_mock.count[ROF_LOG_ERROR]);
+
+    plug_and_update(ID_A, 80.0f);
+    float temp_c = 0.0f;
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_OK, rof_sensor_registry_role(&reg, ROF_ROLE_CHAMBER, &temp_c));
+
+    mock_temp_sensor_unplug(&bus_mock, ID_A);
+    rof_sensor_registry_update(&reg);
+    TEST_ASSERT_EQUAL_UINT(2, log_mock.count[ROF_LOG_ERROR]);
+}
+
+/* SEN-05 */
+static void test_read_error_reports_read_error(void)
+{
+    plug_and_update(ID_A, 80.0f);
+    rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_PROBE_1);
+    mock_temp_sensor_set_read_status(&bus_mock, ID_A, ROF_ERR_IO);
+    rof_sensor_registry_update(&reg);
+    float temp_c = -1.0f;
+
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_READ_ERROR, rof_sensor_registry_role(&reg, ROF_ROLE_PROBE_1, &temp_c));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, -1.0f, temp_c);
+}
+
+/* SEN-04, SEN-05: nach einem Neustart fehlt die Rolle, bis der Sensor gefunden ist */
+static void test_restored_role_is_missing_until_sensor_found(void)
+{
+    plug_and_update(ID_A, 80.0f);
+    rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_CHAMBER);
+    restart();
+    float temp_c = 0.0f;
+
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_MISSING, rof_sensor_registry_role(&reg, ROF_ROLE_CHAMBER, &temp_c));
+
+    rof_sensor_registry_update(&reg);
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_OK, rof_sensor_registry_role(&reg, ROF_ROLE_CHAMBER, &temp_c));
+}
+
+/* SEN-05: fehlt der Sensor schon beim Start, wird das ebenfalls gemeldet */
+static void test_sensor_missing_at_start_is_logged(void)
+{
+    plug_and_update(ID_A, 80.0f);
+    rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_CHAMBER);
+    mock_temp_sensor_unplug(&bus_mock, ID_A);
+    restart();
+
+    rof_sensor_registry_update(&reg);
+
+    TEST_ASSERT_EQUAL_UINT(1, log_mock.count[ROF_LOG_ERROR]);
+}
+
+/* SEN-05: ein Busfehler lässt die zugeordneten Sensoren des Busses fehlen */
+static void test_bus_error_makes_assigned_role_missing(void)
+{
+    plug_and_update(ID_A, 80.0f);
+    rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_CHAMBER);
+    mock_temp_sensor_set_enumerate_status(&bus_mock, ROF_ERR_IO);
+    rof_sensor_registry_update(&reg);
+    float temp_c = 0.0f;
+
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_MISSING, rof_sensor_registry_role(&reg, ROF_ROLE_CHAMBER, &temp_c));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -567,6 +677,15 @@ int main(void)
     RUN_TEST(test_unreadable_storage_starts_without_assignments);
     RUN_TEST(test_handcrafted_valid_block_is_restored);
     RUN_TEST(test_corrupt_stored_blocks_are_discarded);
+
+    RUN_TEST(test_role_without_sensor_is_unassigned);
+    RUN_TEST(test_role_reports_temperature_with_offset);
+    RUN_TEST(test_missing_assigned_sensor_reports_missing);
+    RUN_TEST(test_missing_sensor_is_logged_once_per_loss);
+    RUN_TEST(test_read_error_reports_read_error);
+    RUN_TEST(test_restored_role_is_missing_until_sensor_found);
+    RUN_TEST(test_sensor_missing_at_start_is_logged);
+    RUN_TEST(test_bus_error_makes_assigned_role_missing);
 
     return UNITY_END();
 }

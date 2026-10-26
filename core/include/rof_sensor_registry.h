@@ -40,6 +40,14 @@ typedef enum {
     ROF_ROLE_COUNT /* Anzahl der Rollen, keine eigene Rolle */
 } rof_role_t;
 
+/* Zustand einer Rolle (SEN-05). Alles außer OK ist für die Rolle ein Fehler. */
+typedef enum {
+    ROF_ROLE_STATUS_OK = 0,
+    ROF_ROLE_STATUS_UNASSIGNED, /* kein Sensor hat diese Rolle */
+    ROF_ROLE_STATUS_MISSING,    /* der zugeordnete Sensor wurde nicht gefunden */
+    ROF_ROLE_STATUS_READ_ERROR  /* der Sensor ist da, aber die Messung schlug fehl */
+} rof_role_status_t;
+
 typedef struct {
     rof_sensor_id_t id;
     const char *type; /* vom Treiber gemeldeter Sensortyp, "" bis zur ersten Meldung nach dem Start */
@@ -50,6 +58,7 @@ typedef struct {
     rof_status_t read_status;        /* Ergebnis des letzten Lesens, ROF_ERR_NOT_FOUND wenn nicht vorhanden */
     float raw_c;                     /* letzter gültiger Rohwert des Treibers */
     float temp_c;                    /* raw_c + offset_c */
+    bool missing_reported;           /* intern: Ausfall schon geloggt */
 } rof_sensor_channel_t;
 
 typedef struct {
@@ -95,6 +104,12 @@ rof_status_t rof_sensor_registry_assign(rof_sensor_registry_t *reg, rof_sensor_i
  * Schlägt das Speichern fehl, bleibt der alte Offset. */
 rof_status_t rof_sensor_registry_set_offset(rof_sensor_registry_t *reg, rof_sensor_id_t id,
                                             float offset_c);
+
+/* Zustand der Rolle. Nur bei ROF_ROLE_STATUS_OK wird *temp_c geschrieben,
+ * und zwar mit dem Wert inklusive Offset. Für ROF_ROLE_UNASSIGNED und
+ * ungültige Rollen liefert die Funktion ROF_ROLE_STATUS_UNASSIGNED. */
+rof_role_status_t rof_sensor_registry_role(const rof_sensor_registry_t *reg, rof_role_t role,
+                                           float *temp_c);
 
 size_t rof_sensor_registry_channel_count(const rof_sensor_registry_t *reg);
 

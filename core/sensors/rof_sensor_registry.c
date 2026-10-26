@@ -113,6 +113,17 @@ static void scan_driver(rof_sensor_registry_t *reg, const rof_temp_sensor_t *dri
     }
 }
 
+/* Loggt den Ausfall eines zugeordneten Sensors einmal, bis er wieder da ist. */
+static void report_missing(const rof_sensor_registry_t *reg, rof_sensor_channel_t *ch)
+{
+    if (ch->present) {
+        ch->missing_reported = false;
+    } else if (ch->role != ROF_ROLE_UNASSIGNED && !ch->missing_reported) {
+        rof_log_write(reg->logger, ROF_LOG_ERROR, "Zugeordneter Sensor fehlt");
+        ch->missing_reported = true;
+    }
+}
+
 static void read_channel(rof_sensor_channel_t *ch)
 {
     if (!ch->present) {
@@ -271,6 +282,7 @@ void rof_sensor_registry_update(rof_sensor_registry_t *reg)
     }
     remove_unused_channels(reg);
     for (size_t i = 0; i < reg->channel_count; i++) {
+        report_missing(reg, &reg->channels[i]);
         read_channel(&reg->channels[i]);
     }
 }
@@ -327,6 +339,29 @@ rof_status_t rof_sensor_registry_assign(rof_sensor_registry_t *reg, rof_sensor_i
         return status;
     }
     return ROF_OK;
+}
+
+rof_role_status_t rof_sensor_registry_role(const rof_sensor_registry_t *reg, rof_role_t role,
+                                           float *temp_c)
+{
+    if (role == ROF_ROLE_UNASSIGNED || !role_is_valid(role)) {
+        return ROF_ROLE_STATUS_UNASSIGNED;
+    }
+    for (size_t i = 0; i < reg->channel_count; i++) {
+        const rof_sensor_channel_t *ch = &reg->channels[i];
+        if (ch->role != role) {
+            continue;
+        }
+        if (!ch->present) {
+            return ROF_ROLE_STATUS_MISSING;
+        }
+        if (ch->read_status != ROF_OK) {
+            return ROF_ROLE_STATUS_READ_ERROR;
+        }
+        *temp_c = ch->temp_c;
+        return ROF_ROLE_STATUS_OK;
+    }
+    return ROF_ROLE_STATUS_UNASSIGNED;
 }
 
 size_t rof_sensor_registry_channel_count(const rof_sensor_registry_t *reg)
