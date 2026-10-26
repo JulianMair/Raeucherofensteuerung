@@ -69,4 +69,6 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 - Die lokale Sicherung der alten Historie wird gelöscht
 - Plan für M2 ohne Änderungen freigegeben
 
-**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M2 ergänzt.
+**Vom Nutzer geändert oder abgelehnt:** nichts.
+
+**Nach dem Push:** Der CI-Lauf #3 war rot. cppcheck 2.13 auf dem Runner meldete eine doppelte NULL-Prüfung in einem Test (`nullPointerRedundantCheck`), die cppcheck 2.22 lokal nicht meldete. Das CI-Log hat Claude auf Wunsch des Nutzers über Claude in Chrome gelesen, weil GitHub es nur angemeldet herausgibt. Ein Versuch, cppcheck 2.13 lokal aus dem Quellcode zu bauen, war vom Berechtigungssystem blockiert worden. Nach dem Fix (`test(sensors): drop redundant null checks before existing_channel`) war Lauf #4 grün.
