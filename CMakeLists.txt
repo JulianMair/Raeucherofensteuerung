@@ -16,10 +16,14 @@ add_library(project_warnings INTERFACE)
 target_compile_options(project_warnings INTERFACE -Wall -Wextra -Wpedantic -Werror)
 
 enable_testing()
+add_subdirectory(core)
+add_subdirectory(platform/host)
 add_subdirectory(test)
 
 # Statische Analyse: cmake --build build --target cppcheck
 # Prüft alle Dateien aus compile_commands.json, Unity ausgenommen.
+# constParameterCallback ist abgeschaltet: Callbacks müssen exakt die Signatur
+# des Interfaces haben, und ctx ist dort bewusst nicht const (siehe E-007).
 find_program(CPPCHECK_EXE cppcheck)
 if(CPPCHECK_EXE)
     add_custom_target(cppcheck
@@ -32,6 +36,7 @@ if(CPPCHECK_EXE)
             --quiet
             -i ${CMAKE_SOURCE_DIR}/test/vendor
             --suppress=*:*/test/vendor/*
+            --suppress=constParameterCallback
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         VERBATIM
         USES_TERMINAL)

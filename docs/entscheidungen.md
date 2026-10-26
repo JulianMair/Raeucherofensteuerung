@@ -44,3 +44,12 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
 - **Kontext:** CLAUDE.md und die Anforderungen benennen Rollen, Zustände und Interfaces auf Deutsch. C-Standardbibliothek und ESP-IDF sind englisch.
 - **Entscheidung:** Bezeichner im Code sind englisch. `docs/glossar.md` ordnet jeden deutschen Begriff verbindlich zu. „Kern“ wird zu `PROBE`, nicht zu `CORE`, damit es nicht mit dem Ordner `core/` verwechselt wird.
 - **Verworfen:** Deutsche Bezeichner. Sie entsprechen den Anforderungen 1:1, mischen sich aber in jeder Zeile mit englischem C und ESP-IDF.
+
+## E-007 Interfaces als Struct mit ctx und Funktionszeigern (M1)
+
+- **Kontext:** core darf nur über Interfaces mit Hardware, Uhr und Speicher sprechen (ARC-02). Auf dem Host stehen Mocks dahinter, auf dem ESP32 Treiber. DS18B20 und später PT1000 sollen gleichzeitig laufen können (SEN-06).
+- **Entscheidung:** Jedes Interface ist ein Struct aus `void *ctx` und Funktionszeigern. `ctx` zeigt auf den Zustand der Implementierung und wird an jede Funktion durchgereicht, ähnlich wie `this`. Zu jedem Interface gibt es kleine `static inline`-Hilfsfunktionen wie `rof_clock_now_ms(&clk)`, damit niemand den falschen `ctx` übergibt. `ctx` ist nicht `const`, weil Implementierungen beim Aufruf ihren Zustand ändern dürfen. Ein Mock zählt zum Beispiel Aufrufe, ein Treiber startet eine Messung. Die cppcheck-Meldung `constParameterCallback` ist deshalb abgeschaltet.
+- **Interfaces sind Pflicht:** Die Hilfsfunktionen prüfen nicht auf `NULL`. Jede Prüfung wäre ein zusätzlicher Zweig in jedem Modul, das sie benutzt, und erschwert die 100 % Zweigabdeckung in `core/safety`. Module prüfen ihre Interfaces einmal bei der Initialisierung.
+- **Verworfen:**
+  - Austausch beim Linken (eine `.c` je Plattform hinter demselben Header): Damit gäbe es nur eine Implementierung pro Programm, also nicht zwei Sensortreiber gleichzeitig. Auch Tests könnten nicht pro Testfall eine andere Implementierung einsetzen.
+  - `const void *ctx`: Das passt nur für reine Lesefunktionen und würde je Interface unterschiedliche Regeln erzeugen.
