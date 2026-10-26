@@ -1,0 +1,27 @@
+# Host-Build (CMake)
+build/
+/compile_commands.json
+
+# Abdeckung (gcov, gcovr)
+*.gcda
+*.gcno
+*.gcov
+coverage/
+
+# Firmware (ESP-IDF)
+# sdkconfig enthält die echte Konfiguration, später auch das WLAN-Passwort.
+# Ins Repository kommt nur sdkconfig.defaults mit Platzhaltern.
+firmware/build/
+firmware/sdkconfig
+firmware/sdkconfig.old
+firmware/managed_components/
+
+# Weboberfläche
+node_modules/
+web/dist/
+
+# Editor und Betriebssystem
+.DS_Store
+.vscode/
+.idea/
+.cache/
