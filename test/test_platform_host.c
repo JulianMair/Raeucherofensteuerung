@@ -8,6 +8,7 @@
 
 #include "fake_clock.h"
 #include "mock_output.h"
+#include "mock_storage.h"
 #include "mock_temp_sensor.h"
 
 #include <math.h>
@@ -247,6 +248,131 @@ static void test_mock_output_rejects_invalid_duty_and_keeps_last(void)
     TEST_ASSERT_EQUAL_UINT(4, heater_mock.set_calls);
 }
 
+/* ---- Mock-Speicher ----------------------------------------------------- */
+
+static mock_storage_t flash_mock;
+static rof_storage_t flash;
+
+static void flash_setup(void)
+{
+    mock_storage_init(&flash_mock);
+    flash = mock_storage_interface(&flash_mock);
+}
+
+static void test_mock_storage_unknown_key_is_not_found(void)
+{
+    flash_setup();
+    uint8_t buf[8];
+    size_t len = 99;
+
+    TEST_ASSERT_EQUAL(ROF_ERR_NOT_FOUND, rof_storage_load(&flash, "roles", buf, sizeof(buf), &len));
+    TEST_ASSERT_EQUAL_size_t(99, len);
+}
+
+static void test_mock_storage_saves_and_loads_block(void)
+{
+    flash_setup();
+    const uint8_t data[] = { 1, 2, 3, 4, 5 };
+    uint8_t buf[16] = { 0 };
+    size_t len = 0;
+
+    TEST_ASSERT_EQUAL(ROF_OK, rof_storage_save(&flash, "roles", data, sizeof(data)));
+    TEST_ASSERT_EQUAL(ROF_OK, rof_storage_load(&flash, "roles", buf, sizeof(buf), &len));
+    TEST_ASSERT_EQUAL_size_t(sizeof(data), len);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(data, buf, sizeof(data));
+}
+
+static void test_mock_storage_save_replaces_old_block(void)
+{
+    flash_setup();
+    const uint8_t first[] = { 1, 2, 3, 4 };
+    const uint8_t second[] = { 9, 8 };
+    uint8_t buf[16] = { 0 };
+    size_t len = 0;
+
+    rof_storage_save(&flash, "roles", first, sizeof(first));
+    TEST_ASSERT_EQUAL(ROF_OK, rof_storage_save(&flash, "roles", second, sizeof(second)));
+    TEST_ASSERT_EQUAL(ROF_OK, rof_storage_load(&flash, "roles", buf, sizeof(buf), &len));
+    TEST_ASSERT_EQUAL_size_t(sizeof(second), len);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(second, buf, sizeof(second));
+}
+
+static void test_mock_storage_survives_restart(void)
+{
+    flash_setup();
+    const uint8_t data[] = { 42 };
+    rof_storage_save(&flash, "roles", data, sizeof(data));
+
+    /* Neustart: core holt sich ein neues Interface, die Daten im Mock bleiben. */
+    rof_storage_t after_restart = mock_storage_interface(&flash_mock);
+    uint8_t buf[4] = { 0 };
+    size_t len = 0;
+
+    TEST_ASSERT_EQUAL(ROF_OK, rof_storage_load(&after_restart, "roles", buf, sizeof(buf), &len));
+    TEST_ASSERT_EQUAL_UINT8(42, buf[0]);
+}
+
+static void test_mock_storage_too_small_buffer_is_no_space(void)
+{
+    flash_setup();
+    const uint8_t data[] = { 1, 2, 3, 4 };
+    uint8_t buf[2] = { 0 };
+    size_t len = 99;
+    rof_storage_save(&flash, "roles", data, sizeof(data));
+
+    TEST_ASSERT_EQUAL(ROF_ERR_NO_SPACE, rof_storage_load(&flash, "roles", buf, sizeof(buf), &len));
+    TEST_ASSERT_EQUAL_size_t(99, len);
+    TEST_ASSERT_EQUAL_UINT8(0, buf[0]);
+}
+
+static void test_mock_storage_rejects_invalid_keys(void)
+{
+    flash_setup();
+    const uint8_t data[] = { 1 };
+    uint8_t buf[4];
+    size_t len = 0;
+
+    TEST_ASSERT_EQUAL(ROF_ERR_INVALID_ARG, rof_storage_save(&flash, "", data, sizeof(data)));
+    TEST_ASSERT_EQUAL(ROF_ERR_INVALID_ARG,
+                      rof_storage_save(&flash, "sixteen_chars_xx", data, sizeof(data)));
+    TEST_ASSERT_EQUAL(ROF_ERR_INVALID_ARG, rof_storage_load(&flash, "", buf, sizeof(buf), &len));
+    /* 15 Zeichen sind gerade noch erlaubt */
+    TEST_ASSERT_EQUAL(ROF_OK, rof_storage_save(&flash, "fifteen_chars_x", data, sizeof(data)));
+}
+
+static void test_mock_storage_full_is_no_space(void)
+{
+    flash_setup();
+    const uint8_t data[] = { 1 };
+    char key[] = "key0";
+    for (int i = 0; i < MOCK_STORAGE_SLOTS; i++) {
+        key[3] = (char)('0' + i);
+        TEST_ASSERT_EQUAL(ROF_OK, rof_storage_save(&flash, key, data, sizeof(data)));
+    }
+    TEST_ASSERT_EQUAL(ROF_ERR_NO_SPACE, rof_storage_save(&flash, "one_more", data, sizeof(data)));
+
+    static uint8_t too_big[MOCK_STORAGE_VALUE_MAX + 1];
+    TEST_ASSERT_EQUAL(ROF_ERR_NO_SPACE, rof_storage_save(&flash, "key0", too_big, sizeof(too_big)));
+}
+
+static void test_mock_storage_injected_errors(void)
+{
+    flash_setup();
+    const uint8_t data[] = { 1 };
+    uint8_t buf[4];
+    size_t len = 0;
+
+    mock_storage_set_save_status(&flash_mock, ROF_ERR_IO);
+    TEST_ASSERT_EQUAL(ROF_ERR_IO, rof_storage_save(&flash, "roles", data, sizeof(data)));
+    mock_storage_set_save_status(&flash_mock, ROF_OK);
+    TEST_ASSERT_EQUAL(ROF_ERR_NOT_FOUND, rof_storage_load(&flash, "roles", buf, sizeof(buf), &len));
+
+    rof_storage_save(&flash, "roles", data, sizeof(data));
+    mock_storage_set_load_status(&flash_mock, ROF_ERR_IO);
+    TEST_ASSERT_EQUAL(ROF_ERR_IO, rof_storage_load(&flash, "roles", buf, sizeof(buf), &len));
+    TEST_ASSERT_EQUAL_UINT(2, flash_mock.save_calls);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -270,6 +396,15 @@ int main(void)
     RUN_TEST(test_mock_output_records_last_duty);
     RUN_TEST(test_mock_output_accepts_bounds);
     RUN_TEST(test_mock_output_rejects_invalid_duty_and_keeps_last);
+
+    RUN_TEST(test_mock_storage_unknown_key_is_not_found);
+    RUN_TEST(test_mock_storage_saves_and_loads_block);
+    RUN_TEST(test_mock_storage_save_replaces_old_block);
+    RUN_TEST(test_mock_storage_survives_restart);
+    RUN_TEST(test_mock_storage_too_small_buffer_is_no_space);
+    RUN_TEST(test_mock_storage_rejects_invalid_keys);
+    RUN_TEST(test_mock_storage_full_is_no_space);
+    RUN_TEST(test_mock_storage_injected_errors);
 
     return UNITY_END();
 }
