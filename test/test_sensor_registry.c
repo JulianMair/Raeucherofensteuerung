@@ -10,6 +10,7 @@
 #include "rof_sensor_registry.h"
 
 #include <math.h>
+#include <string.h>
 
 #define ID_A 0x28AA000000000001ULL
 #define ID_B 0x28BB000000000002ULL
@@ -48,6 +49,15 @@ static const rof_sensor_channel_t *channel_of(rof_sensor_id_t id)
         }
     }
     return NULL;
+}
+
+/* Kanal mit dieser ID. Fehlt er, scheitert der Test hier, statt später
+ * beim Zugriff über einen NULL-Zeiger das ganze Testprogramm abzubrechen. */
+static const rof_sensor_channel_t *existing_channel(rof_sensor_id_t id)
+{
+    const rof_sensor_channel_t *ch = channel_of(id);
+    TEST_ASSERT_NOT_NULL_MESSAGE(ch, "Kanal fehlt");
+    return ch;
 }
 
 /* ---- Initialisierung ---------------------------------------------------- */
@@ -137,7 +147,7 @@ static void test_replugged_sensor_gets_a_channel_again(void)
     rof_sensor_registry_update(&reg);
 
     TEST_ASSERT_NOT_NULL(channel_of(ID_A));
-    TEST_ASSERT_TRUE(channel_of(ID_A)->present);
+    TEST_ASSERT_TRUE(existing_channel(ID_A)->present);
 }
 
 static void test_bus_error_is_logged_and_sensors_count_as_absent(void)
@@ -170,7 +180,7 @@ static void test_update_reads_temperatures(void)
 
     rof_sensor_registry_update(&reg);
 
-    const rof_sensor_channel_t *a = channel_of(ID_A);
+    const rof_sensor_channel_t *a = existing_channel(ID_A);
     TEST_ASSERT_EQUAL(ROF_OK, a->read_status);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 20.5f, a->raw_c);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 20.5f, a->temp_c);
@@ -185,7 +195,7 @@ static void test_offset_is_added_to_reading(void)
     TEST_ASSERT_EQUAL(ROF_OK, rof_sensor_registry_set_offset(&reg, ID_A, -1.5f));
     rof_sensor_registry_update(&reg);
 
-    const rof_sensor_channel_t *a = channel_of(ID_A);
+    const rof_sensor_channel_t *a = existing_channel(ID_A);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, -1.5f, a->offset_c);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 20.0f, a->raw_c);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 18.5f, a->temp_c);
@@ -199,7 +209,7 @@ static void test_offset_change_applies_immediately(void)
 
     rof_sensor_registry_set_offset(&reg, ID_A, 2.0f);
 
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 22.0f, channel_of(ID_A)->temp_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 22.0f, existing_channel(ID_A)->temp_c);
 }
 
 /* SEN-01, E-014: ±5 °C erlaubt, alles andere abgelehnt statt begrenzt */
@@ -214,7 +224,7 @@ static void test_offset_outside_limits_is_rejected(void)
     TEST_ASSERT_EQUAL(ROF_ERR_INVALID_ARG, rof_sensor_registry_set_offset(&reg, ID_A, -5.01f));
     TEST_ASSERT_EQUAL(ROF_ERR_INVALID_ARG, rof_sensor_registry_set_offset(&reg, ID_A, NAN));
 
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, -5.0f, channel_of(ID_A)->offset_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, -5.0f, existing_channel(ID_A)->offset_c);
 }
 
 static void test_offset_for_unknown_sensor_is_not_found(void)
@@ -232,7 +242,7 @@ static void test_read_error_keeps_last_value(void)
     mock_temp_sensor_set_temp(&bus_mock, ID_A, 99.0f);
     rof_sensor_registry_update(&reg);
 
-    const rof_sensor_channel_t *a = channel_of(ID_A);
+    const rof_sensor_channel_t *a = existing_channel(ID_A);
     TEST_ASSERT_EQUAL(ROF_ERR_IO, a->read_status);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 20.0f, a->temp_c);
 }
@@ -247,7 +257,7 @@ static void test_unplugged_sensor_with_offset_keeps_channel(void)
     mock_temp_sensor_unplug(&bus_mock, ID_A);
     rof_sensor_registry_update(&reg);
 
-    const rof_sensor_channel_t *a = channel_of(ID_A);
+    const rof_sensor_channel_t *a = existing_channel(ID_A);
     TEST_ASSERT_NOT_NULL(a);
     TEST_ASSERT_FALSE(a->present);
     TEST_ASSERT_EQUAL(ROF_ERR_NOT_FOUND, a->read_status);
@@ -268,7 +278,7 @@ static void test_assign_sets_role_and_saves(void)
 
     TEST_ASSERT_EQUAL(ROF_OK, rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_CHAMBER));
 
-    TEST_ASSERT_EQUAL(ROF_ROLE_CHAMBER, channel_of(ID_A)->role);
+    TEST_ASSERT_EQUAL(ROF_ROLE_CHAMBER, existing_channel(ID_A)->role);
     TEST_ASSERT_EQUAL_UINT(1, flash_mock.save_calls);
 }
 
@@ -282,7 +292,7 @@ static void test_all_roles_can_be_assigned_to_different_sensors(void)
         TEST_ASSERT_EQUAL(ROF_OK, rof_sensor_registry_assign(&reg, id, roles[id - 1]));
     }
     for (rof_sensor_id_t id = 1; id <= 4; id++) {
-        TEST_ASSERT_EQUAL(roles[id - 1], channel_of(id)->role);
+        TEST_ASSERT_EQUAL(roles[id - 1], existing_channel(id)->role);
     }
 }
 
@@ -295,8 +305,8 @@ static void test_assign_moves_role_from_previous_sensor(void)
 
     TEST_ASSERT_EQUAL(ROF_OK, rof_sensor_registry_assign(&reg, ID_B, ROF_ROLE_CHAMBER));
 
-    TEST_ASSERT_EQUAL(ROF_ROLE_UNASSIGNED, channel_of(ID_A)->role);
-    TEST_ASSERT_EQUAL(ROF_ROLE_CHAMBER, channel_of(ID_B)->role);
+    TEST_ASSERT_EQUAL(ROF_ROLE_UNASSIGNED, existing_channel(ID_A)->role);
+    TEST_ASSERT_EQUAL(ROF_ROLE_CHAMBER, existing_channel(ID_B)->role);
 }
 
 /* SEN-02 */
@@ -307,7 +317,7 @@ static void test_assign_unassigned_releases_role(void)
 
     TEST_ASSERT_EQUAL(ROF_OK, rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_UNASSIGNED));
 
-    TEST_ASSERT_EQUAL(ROF_ROLE_UNASSIGNED, channel_of(ID_A)->role);
+    TEST_ASSERT_EQUAL(ROF_ROLE_UNASSIGNED, existing_channel(ID_A)->role);
 }
 
 static void test_assign_rejects_unknown_sensor(void)
@@ -322,7 +332,7 @@ static void test_assign_rejects_invalid_role(void)
 
     TEST_ASSERT_EQUAL(ROF_ERR_INVALID_ARG, rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_COUNT));
     TEST_ASSERT_EQUAL(ROF_ERR_INVALID_ARG, rof_sensor_registry_assign(&reg, ID_A, (rof_role_t)99));
-    TEST_ASSERT_EQUAL(ROF_ROLE_UNASSIGNED, channel_of(ID_A)->role);
+    TEST_ASSERT_EQUAL(ROF_ROLE_UNASSIGNED, existing_channel(ID_A)->role);
 }
 
 /* SEN-04: Was nicht gespeichert werden kann, gilt auch im RAM nicht */
@@ -335,8 +345,8 @@ static void test_assign_is_undone_when_saving_fails(void)
 
     TEST_ASSERT_EQUAL(ROF_ERR_IO, rof_sensor_registry_assign(&reg, ID_B, ROF_ROLE_CHAMBER));
 
-    TEST_ASSERT_EQUAL(ROF_ROLE_CHAMBER, channel_of(ID_A)->role);
-    TEST_ASSERT_EQUAL(ROF_ROLE_UNASSIGNED, channel_of(ID_B)->role);
+    TEST_ASSERT_EQUAL(ROF_ROLE_CHAMBER, existing_channel(ID_A)->role);
+    TEST_ASSERT_EQUAL(ROF_ROLE_UNASSIGNED, existing_channel(ID_B)->role);
 }
 
 /* SEN-04 */
@@ -349,8 +359,8 @@ static void test_offset_is_saved_and_undone_when_saving_fails(void)
     mock_storage_set_save_status(&flash_mock, ROF_ERR_IO);
     TEST_ASSERT_EQUAL(ROF_ERR_IO, rof_sensor_registry_set_offset(&reg, ID_A, 3.0f));
 
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 1.0f, channel_of(ID_A)->offset_c);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 21.0f, channel_of(ID_A)->temp_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 1.0f, existing_channel(ID_A)->offset_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 21.0f, existing_channel(ID_A)->temp_c);
 }
 
 /* SEN-04: Format Version 1 = Version, Anzahl, je Eintrag ID (8), Rolle (1), Offset (4) */
@@ -383,7 +393,140 @@ static void test_unplugged_assigned_sensor_keeps_channel(void)
     rof_sensor_registry_update(&reg);
 
     TEST_ASSERT_NOT_NULL(channel_of(ID_A));
-    TEST_ASSERT_FALSE(channel_of(ID_A)->present);
+    TEST_ASSERT_FALSE(existing_channel(ID_A)->present);
+}
+
+/* ---- Wiederherstellen nach Neustart ------------------------------------- */
+
+/* Neustart: core wird neu initialisiert, Bus und Speicher bleiben. */
+static void restart(void)
+{
+    TEST_ASSERT_EQUAL(ROF_OK, rof_sensor_registry_init(&reg, drivers, 1, &flash, &logger_if));
+}
+
+/* Ein Eintrag im Speicherformat Version 1, siehe test_saved_block_has_version_count_and_entries */
+static void put_entry(uint8_t *dst, uint64_t id, uint8_t role, float offset_c)
+{
+    uint32_t bits;
+    memcpy(&bits, &offset_c, sizeof(bits));
+    for (unsigned i = 0; i < 8; i++) {
+        dst[i] = (uint8_t)(id >> (8u * i));
+    }
+    dst[8] = role;
+    for (unsigned i = 0; i < 4; i++) {
+        dst[9 + i] = (uint8_t)(bits >> (8u * i));
+    }
+}
+
+/* SEN-04 */
+static void test_restart_restores_roles_and_offsets(void)
+{
+    plug_and_update(ID_A, 20.0f);
+    plug_and_update(ID_B, 30.0f);
+    rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_CHAMBER);
+    rof_sensor_registry_assign(&reg, ID_B, ROF_ROLE_PROBE_1);
+    rof_sensor_registry_set_offset(&reg, ID_B, 1.5f);
+
+    restart();
+
+    /* Vor dem ersten update() sind die Kanäle bekannt, aber noch nicht gefunden. */
+    TEST_ASSERT_EQUAL_size_t(2, rof_sensor_registry_channel_count(&reg));
+    TEST_ASSERT_EQUAL(ROF_ROLE_CHAMBER, existing_channel(ID_A)->role);
+    TEST_ASSERT_FALSE(existing_channel(ID_A)->present);
+    TEST_ASSERT_EQUAL(ROF_ERR_NOT_FOUND, existing_channel(ID_A)->read_status);
+    TEST_ASSERT_EQUAL_STRING("", existing_channel(ID_A)->type);
+
+    rof_sensor_registry_update(&reg);
+
+    TEST_ASSERT_TRUE(existing_channel(ID_A)->present);
+    TEST_ASSERT_EQUAL_STRING("DS18B20", existing_channel(ID_A)->type);
+    TEST_ASSERT_EQUAL(ROF_ROLE_PROBE_1, existing_channel(ID_B)->role);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 31.5f, existing_channel(ID_B)->temp_c);
+}
+
+/* SEN-04: erster Start ohne gespeicherte Zuordnung ist kein Fehler */
+static void test_first_start_has_no_channels_and_no_error(void)
+{
+    TEST_ASSERT_EQUAL_size_t(0, rof_sensor_registry_channel_count(&reg));
+    TEST_ASSERT_EQUAL_UINT(0, log_mock.count[ROF_LOG_ERROR]);
+}
+
+/* SEN-04: Speicher nicht lesbar, Start ohne Zuordnung */
+static void test_unreadable_storage_starts_without_assignments(void)
+{
+    plug_and_update(ID_A, 20.0f);
+    rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_CHAMBER);
+    mock_storage_set_load_status(&flash_mock, ROF_ERR_IO);
+
+    restart();
+
+    TEST_ASSERT_EQUAL_size_t(0, rof_sensor_registry_channel_count(&reg));
+    TEST_ASSERT_EQUAL_UINT(1, log_mock.count[ROF_LOG_ERROR]);
+}
+
+/* Gegenprobe zu den kaputten Blöcken: put_entry erzeugt gültige Daten */
+static void test_handcrafted_valid_block_is_restored(void)
+{
+    uint8_t blob[2 + 2 * 13] = { 1, 2 };
+    put_entry(&blob[2], ID_A, ROF_ROLE_CHAMBER, 0.0f);
+    put_entry(&blob[15], ID_B, ROF_ROLE_UNASSIGNED, -2.0f);
+    rof_storage_save(&flash, ROF_SENSOR_STORAGE_KEY, blob, sizeof(blob));
+
+    restart();
+
+    TEST_ASSERT_EQUAL(ROF_ROLE_CHAMBER, existing_channel(ID_A)->role);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, -2.0f, existing_channel(ID_B)->offset_c);
+}
+
+/* SEN-04: kaputte oder fremde Daten werden komplett verworfen und gemeldet */
+static void check_block_is_discarded(const uint8_t *blob, size_t len)
+{
+    mock_storage_init(&flash_mock);
+    mock_log_init(&log_mock);
+    rof_storage_save(&flash, ROF_SENSOR_STORAGE_KEY, blob, len);
+
+    restart();
+
+    TEST_ASSERT_EQUAL_size_t(0, rof_sensor_registry_channel_count(&reg));
+    TEST_ASSERT_EQUAL_UINT(1, log_mock.count[ROF_LOG_ERROR]);
+}
+
+static void test_corrupt_stored_blocks_are_discarded(void)
+{
+    uint8_t blob[2 + 9 * 13] = { 0 };
+
+    const uint8_t too_short[] = { 1 };
+    check_block_is_discarded(too_short, sizeof(too_short));
+
+    const uint8_t unknown_version[] = { 2, 0 };
+    check_block_is_discarded(unknown_version, sizeof(unknown_version));
+
+    blob[0] = 1;
+    blob[1] = 9; /* mehr Einträge als Kanäle */
+    for (unsigned i = 0; i < 9; i++) {
+        put_entry(&blob[2 + i * 13], 100 + i, ROF_ROLE_UNASSIGNED, 1.0f);
+    }
+    check_block_is_discarded(blob, sizeof(blob));
+
+    blob[1] = 1; /* Länge passt nicht zur Anzahl */
+    check_block_is_discarded(blob, 2 + 13 + 1);
+
+    put_entry(&blob[2], ID_A, 7, 0.0f); /* keine gültige Rolle */
+    check_block_is_discarded(blob, 2 + 13);
+
+    put_entry(&blob[2], ID_A, ROF_ROLE_CHAMBER, 6.0f); /* Offset außerhalb */
+    check_block_is_discarded(blob, 2 + 13);
+
+    put_entry(&blob[2], ID_A, ROF_ROLE_CHAMBER, NAN);
+    check_block_is_discarded(blob, 2 + 13);
+
+    blob[1] = 2;
+    put_entry(&blob[2], ID_A, ROF_ROLE_CHAMBER, 0.0f);
+    put_entry(&blob[15], ID_A, ROF_ROLE_PROBE_1, 0.0f); /* ID doppelt */
+    check_block_is_discarded(blob, 2 + 2 * 13);
+
+    put_entry(&blob[15], ID_B, ROF_ROLE_CHAMBER, 0.0f); /* Rolle doppelt */
+    check_block_is_discarded(blob, 2 + 2 * 13);
 }
 
 int main(void)
@@ -418,6 +561,12 @@ int main(void)
     RUN_TEST(test_offset_is_saved_and_undone_when_saving_fails);
     RUN_TEST(test_saved_block_has_version_count_and_entries);
     RUN_TEST(test_unplugged_assigned_sensor_keeps_channel);
+
+    RUN_TEST(test_restart_restores_roles_and_offsets);
+    RUN_TEST(test_first_start_has_no_channels_and_no_error);
+    RUN_TEST(test_unreadable_storage_starts_without_assignments);
+    RUN_TEST(test_handcrafted_valid_block_is_restored);
+    RUN_TEST(test_corrupt_stored_blocks_are_discarded);
 
     return UNITY_END();
 }

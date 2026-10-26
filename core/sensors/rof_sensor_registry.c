@@ -35,6 +35,26 @@ static void put_f32(uint8_t *dst, float value)
     }
 }
 
+static uint64_t get_u64(const uint8_t *src)
+{
+    uint64_t value = 0;
+    for (unsigned i = 0; i < 8; i++) {
+        value |= (uint64_t)src[i] << (8u * i);
+    }
+    return value;
+}
+
+static float get_f32(const uint8_t *src)
+{
+    uint32_t bits = 0;
+    for (unsigned i = 0; i < 4; i++) {
+        bits |= (uint32_t)src[i] << (8u * i);
+    }
+    float value;
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
 static bool driver_is_valid(const rof_temp_sensor_t *driver)
 {
     return driver != NULL && driver->enumerate != NULL && driver->read != NULL;
@@ -151,6 +171,56 @@ static rof_status_t save_settings(const rof_sensor_registry_t *reg)
     return rof_storage_save(reg->storage, ROF_SENSOR_STORAGE_KEY, buf, len);
 }
 
+/* Legt für jeden gespeicherten Eintrag einen Kanal an. Liefert false,
+ * sobald irgendetwas nicht stimmt; dann gilt der ganze Block als ungültig. */
+static bool restore_settings(rof_sensor_registry_t *reg, const uint8_t *buf, size_t len)
+{
+    if (len < STORE_HEADER_SIZE || buf[0] != STORE_VERSION || buf[1] > ROF_SENSOR_CHANNELS_MAX ||
+        len != STORE_HEADER_SIZE + (size_t)buf[1] * STORE_ENTRY_SIZE) {
+        return false;
+    }
+    for (size_t i = 0; i < buf[1]; i++) {
+        const uint8_t *entry = &buf[STORE_HEADER_SIZE + i * STORE_ENTRY_SIZE];
+        const rof_sensor_id_t id = get_u64(entry);
+        const rof_role_t role = (rof_role_t)entry[8];
+        const float offset_c = get_f32(&entry[9]);
+        if (!role_is_valid(role) || !offset_is_valid(offset_c) || find_channel(reg, id) != NULL ||
+            (role != ROF_ROLE_UNASSIGNED && find_role(reg, role) != NULL)) {
+            return false;
+        }
+        reg->channels[reg->channel_count++] = (rof_sensor_channel_t){
+            .id = id,
+            .type = "",
+            .role = role,
+            .offset_c = offset_c,
+            .read_status = ROF_ERR_NOT_FOUND,
+        };
+    }
+    return true;
+}
+
+/* Ohne gültige gespeicherte Daten startet die Verwaltung ohne Zuordnung.
+ * Der Garraum ist dann nicht zugeordnet, und die Sicherheitslogik
+ * verhindert das Heizen (sicherer Standard). */
+static void load_settings(rof_sensor_registry_t *reg)
+{
+    uint8_t buf[STORE_MAX_SIZE];
+    size_t len = 0;
+    rof_status_t status = rof_storage_load(reg->storage, ROF_SENSOR_STORAGE_KEY, buf, sizeof(buf), &len);
+    if (status == ROF_ERR_NOT_FOUND) {
+        return; /* erster Start */
+    }
+    if (status != ROF_OK) {
+        rof_log_write(reg->logger, ROF_LOG_ERROR, "Sensorzuordnung nicht lesbar, Start ohne Zuordnung");
+        return;
+    }
+    if (!restore_settings(reg, buf, len)) {
+        reg->channel_count = 0;
+        rof_log_write(reg->logger, ROF_LOG_ERROR,
+                      "Gespeicherte Sensorzuordnung ungültig, Start ohne Zuordnung");
+    }
+}
+
 /* Entfernt Kanäle, die nicht mehr gebraucht werden. Die Reihenfolge der
  * übrigen bleibt erhalten. */
 static void remove_unused_channels(rof_sensor_registry_t *reg)
@@ -187,6 +257,7 @@ rof_status_t rof_sensor_registry_init(rof_sensor_registry_t *reg,
     reg->driver_count = driver_count;
     reg->storage = storage;
     reg->logger = logger;
+    load_settings(reg);
     return ROF_OK;
 }
 

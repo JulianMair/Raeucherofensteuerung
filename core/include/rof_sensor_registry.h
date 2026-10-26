@@ -42,7 +42,7 @@ typedef enum {
 
 typedef struct {
     rof_sensor_id_t id;
-    const char *type; /* vom Treiber gemeldeter Sensortyp */
+    const char *type; /* vom Treiber gemeldeter Sensortyp, "" bis zur ersten Meldung nach dem Start */
     rof_role_t role;
     float offset_c;                  /* Kalibrieroffset, wird zum Rohwert addiert */
     bool present;                    /* beim letzten update() gemeldet */
@@ -62,7 +62,11 @@ typedef struct {
     rof_sensor_info_t scan[ROF_SENSOR_SCAN_MAX]; /* Arbeitsspeicher für update() */
 } rof_sensor_registry_t;
 
-/* Prüft die Interfaces und setzt die Verwaltung auf.
+/* Prüft die Interfaces, setzt die Verwaltung auf und lädt gespeicherte
+ * Rollen und Offsets (SEN-04). Die Kanäle dazu gelten als nicht vorhanden,
+ * bis update() ihre Sensoren findet. Ungültige gespeicherte Daten werden
+ * komplett verworfen und als Fehler geloggt; die Verwaltung startet dann
+ * ohne Zuordnung.
  * Alle Interfaces müssen gültig bleiben, solange reg benutzt wird.
  * ROF_ERR_INVALID_ARG: ein Interface fehlt oder driver_count liegt nicht
  * zwischen 1 und ROF_SENSOR_DRIVERS_MAX. */
