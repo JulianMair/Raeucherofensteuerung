@@ -53,3 +53,18 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
 - **Verworfen:**
   - Austausch beim Linken (eine `.c` je Plattform hinter demselben Header): Damit gäbe es nur eine Implementierung pro Programm, also nicht zwei Sensortreiber gleichzeitig. Auch Tests könnten nicht pro Testfall eine andere Implementierung einsetzen.
   - `const void *ctx`: Das passt nur für reine Lesefunktionen und würde je Interface unterschiedliche Regeln erzeugen.
+
+## E-008 Einheiten an den Interfaces (M1)
+
+- **Kontext:** Alle Module tauschen Temperaturen, Zeiten und Tastgrade aus. Einheitliche Typen verhindern Umrechnungsfehler.
+- **Entscheidung:**
+  - Temperatur als `float` in °C. Der ESP32-S3 hat eine Gleitkommaeinheit für `float`, und Werte wie 85,5 °C bleiben lesbar. Tests vergleichen Gleitkommawerte nur mit Toleranz (`TEST_ASSERT_FLOAT_WITHIN`).
+  - Zeit als `uint64_t` in Millisekunden seit dem Start, monoton. Ein `uint32_t` liefe nach 49 Tagen über und bräuchte Sonderbehandlung.
+  - Tastgrad als `float` von 0.0 bis 1.0.
+- **Verworfen:** Ganzzahlen in Hundertstelgrad. Sie sind auf Chips ohne Gleitkommaeinheit üblich, hier aber unnötig und schwerer zu lesen.
+
+## E-009 Sensor-ID als 64-Bit-Zahl, Sensortyp als Text (M1)
+
+- **Kontext:** SEN-01 verlangt je Kanal eine eindeutige ID und einen Typ. Ein neuer Sensortyp soll nur als Treiber hinzukommen, ohne Änderung in core (SEN-06).
+- **Entscheidung:** Die ID ist ein `uint64_t`, in den die ROM-Adresse des DS18B20 genau passt. Den Typ liefert der Treiber als konstanten Text, z. B. `"DS18B20"`. core speichert und meldet ihn, wertet ihn aber nie aus.
+- **Verworfen:** Ein Enum mit allen Sensortypen in core. Jeder neue Typ hätte dann eine Änderung in core bedeutet.
