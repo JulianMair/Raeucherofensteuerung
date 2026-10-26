@@ -45,7 +45,8 @@ typedef enum {
     ROF_ROLE_STATUS_OK = 0,
     ROF_ROLE_STATUS_UNASSIGNED, /* kein Sensor hat diese Rolle */
     ROF_ROLE_STATUS_MISSING,    /* der zugeordnete Sensor wurde nicht gefunden */
-    ROF_ROLE_STATUS_READ_ERROR  /* der Sensor ist da, aber die Messung schlug fehl */
+    ROF_ROLE_STATUS_READ_ERROR, /* der Sensor ist da, aber die Messung schlug fehl */
+    ROF_ROLE_STATUS_DUPLICATE   /* die ID wurde mehrfach gemeldet, der Wert ist nicht eindeutig */
 } rof_role_status_t;
 
 typedef struct {
@@ -54,11 +55,13 @@ typedef struct {
     rof_role_t role;
     float offset_c;                  /* Kalibrieroffset, wird zum Rohwert addiert */
     bool present;                    /* beim letzten update() gemeldet */
+    bool duplicate;                  /* beim letzten update() mehrfach gemeldet, wird nicht gelesen */
     const rof_temp_sensor_t *driver; /* Treiber, der den Sensor zuletzt gemeldet hat */
     rof_status_t read_status;        /* Ergebnis des letzten Lesens, ROF_ERR_NOT_FOUND wenn nicht vorhanden */
     float raw_c;                     /* letzter gültiger Rohwert des Treibers */
     float temp_c;                    /* raw_c + offset_c */
     bool missing_reported;           /* intern: Ausfall schon geloggt */
+    bool duplicate_reported;         /* intern: doppelte ID schon geloggt */
 } rof_sensor_channel_t;
 
 typedef struct {
@@ -68,6 +71,8 @@ typedef struct {
     const rof_log_t *logger;
     rof_sensor_channel_t channels[ROF_SENSOR_CHANNELS_MAX];
     size_t channel_count;
+    bool overflow;          /* beim letzten update() mehr Sensoren als Platz */
+    bool overflow_reported; /* intern: Überlauf schon geloggt */
     rof_sensor_info_t scan[ROF_SENSOR_SCAN_MAX]; /* Arbeitsspeicher für update() */
 } rof_sensor_registry_t;
 
@@ -110,6 +115,11 @@ rof_status_t rof_sensor_registry_set_offset(rof_sensor_registry_t *reg, rof_sens
  * ungültige Rollen liefert die Funktion ROF_ROLE_STATUS_UNASSIGNED. */
 rof_role_status_t rof_sensor_registry_role(const rof_sensor_registry_t *reg, rof_role_t role,
                                            float *temp_c);
+
+/* true, wenn beim letzten update() nicht alle Sensoren einen Kanal bekamen
+ * oder ein Treiber mehr als ROF_SENSOR_SCAN_MAX Sensoren hatte (SEN-07).
+ * Zugeordnete Sensoren behalten ihren Kanal immer. */
+bool rof_sensor_registry_overflow(const rof_sensor_registry_t *reg);
 
 size_t rof_sensor_registry_channel_count(const rof_sensor_registry_t *reg);
 

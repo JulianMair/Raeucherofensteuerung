@@ -81,13 +81,21 @@ static rof_sensor_channel_t *find_role(rof_sensor_registry_t *reg, rof_role_t ro
 }
 
 /* Vermerkt einen vom Treiber gemeldeten Sensor. Unbekannte Sensoren
- * bekommen einen freien Kanal und sind zunächst nicht zugeordnet (SEN-03). */
+ * bekommen einen freien Kanal und sind zunächst nicht zugeordnet (SEN-03).
+ * Bekannte Kanäle, auch zugeordnete ohne Sensor, behalten ihren Platz;
+ * neue Sensoren bekommen nur, was frei ist (SEN-07). */
 static void note_sensor(rof_sensor_registry_t *reg, const rof_temp_sensor_t *driver,
                         const rof_sensor_info_t *info)
 {
     rof_sensor_channel_t *ch = find_channel(reg, info->id);
+    if (ch != NULL && ch->present) {
+        /* In diesem Durchlauf schon gemeldet: dieselbe ID zweimal */
+        ch->duplicate = true;
+        return;
+    }
     if (ch == NULL) {
         if (reg->channel_count == ROF_SENSOR_CHANNELS_MAX) {
+            reg->overflow = true;
             return;
         }
         ch = &reg->channels[reg->channel_count++];
@@ -103,7 +111,10 @@ static void scan_driver(rof_sensor_registry_t *reg, const rof_temp_sensor_t *dri
 {
     size_t count = 0;
     rof_status_t status = rof_temp_sensor_enumerate(driver, reg->scan, ROF_SENSOR_SCAN_MAX, &count);
-    if (status != ROF_OK) {
+    if (status == ROF_ERR_NO_SPACE) {
+        /* Mehr Sensoren am Bus als abgefragt: die ersten count verarbeiten */
+        reg->overflow = true;
+    } else if (status != ROF_OK) {
         /* Die Sensoren dieses Treibers gelten in diesem Durchlauf als nicht vorhanden. */
         rof_log_write(reg->logger, ROF_LOG_ERROR, "Sensorbus nicht lesbar");
         return;
@@ -124,10 +135,37 @@ static void report_missing(const rof_sensor_registry_t *reg, rof_sensor_channel_
     }
 }
 
+/* Loggt eine doppelte ID einmal, bis sie wieder eindeutig ist. */
+static void report_duplicate(const rof_sensor_registry_t *reg, rof_sensor_channel_t *ch)
+{
+    if (!ch->duplicate) {
+        ch->duplicate_reported = false;
+    } else if (!ch->duplicate_reported) {
+        rof_log_write(reg->logger, ROF_LOG_ERROR, "Sensor-ID mehrfach gemeldet");
+        ch->duplicate_reported = true;
+    }
+}
+
+/* Loggt einen Überlauf einmal, bis wieder genug Platz ist. */
+static void report_overflow(rof_sensor_registry_t *reg)
+{
+    if (!reg->overflow) {
+        reg->overflow_reported = false;
+    } else if (!reg->overflow_reported) {
+        rof_log_write(reg->logger, ROF_LOG_WARN, "Mehr Sensoren als Kanäle, nicht alle werden verwaltet");
+        reg->overflow_reported = true;
+    }
+}
+
 static void read_channel(rof_sensor_channel_t *ch)
 {
     if (!ch->present) {
         ch->read_status = ROF_ERR_NOT_FOUND;
+        return;
+    }
+    if (ch->duplicate) {
+        /* Nicht lesen: unklar, welcher der Sensoren antworten würde */
+        ch->read_status = ROF_ERR_IO;
         return;
     }
     float raw_c = 0.0f;
@@ -276,13 +314,17 @@ void rof_sensor_registry_update(rof_sensor_registry_t *reg)
 {
     for (size_t i = 0; i < reg->channel_count; i++) {
         reg->channels[i].present = false;
+        reg->channels[i].duplicate = false;
     }
+    reg->overflow = false;
     for (size_t d = 0; d < reg->driver_count; d++) {
         scan_driver(reg, reg->drivers[d]);
     }
     remove_unused_channels(reg);
+    report_overflow(reg);
     for (size_t i = 0; i < reg->channel_count; i++) {
         report_missing(reg, &reg->channels[i]);
+        report_duplicate(reg, &reg->channels[i]);
         read_channel(&reg->channels[i]);
     }
 }
@@ -355,6 +397,9 @@ rof_role_status_t rof_sensor_registry_role(const rof_sensor_registry_t *reg, rof
         if (!ch->present) {
             return ROF_ROLE_STATUS_MISSING;
         }
+        if (ch->duplicate) {
+            return ROF_ROLE_STATUS_DUPLICATE;
+        }
         if (ch->read_status != ROF_OK) {
             return ROF_ROLE_STATUS_READ_ERROR;
         }
@@ -362,6 +407,11 @@ rof_role_status_t rof_sensor_registry_role(const rof_sensor_registry_t *reg, rof
         return ROF_ROLE_STATUS_OK;
     }
     return ROF_ROLE_STATUS_UNASSIGNED;
+}
+
+bool rof_sensor_registry_overflow(const rof_sensor_registry_t *reg)
+{
+    return reg->overflow;
 }
 
 size_t rof_sensor_registry_channel_count(const rof_sensor_registry_t *reg)

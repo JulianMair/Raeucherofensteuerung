@@ -14,8 +14,9 @@
 
 #include <stdbool.h>
 
-/* Mehr als die 8 Kanäle der Sensorverwaltung, damit der Überlauf testbar ist. */
-#define MOCK_TEMP_SENSOR_MAX 16
+/* Mehr als die 16 Sensoren, die die Sensorverwaltung je Treiber abfragt
+ * (ROF_SENSOR_SCAN_MAX), damit jeder Überlauf testbar ist. */
+#define MOCK_TEMP_SENSOR_MAX 24
 
 typedef struct {
     bool plugged;

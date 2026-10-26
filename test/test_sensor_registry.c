@@ -639,6 +639,132 @@ static void test_bus_error_makes_assigned_role_missing(void)
     TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_MISSING, rof_sensor_registry_role(&reg, ROF_ROLE_CHAMBER, &temp_c));
 }
 
+/* ---- Doppelte IDs und zu viele Sensoren --------------------------------- */
+
+/* Speichert ID_A als Garraum und startet neu, ohne den Bus zu ändern. */
+static void restart_with_chamber_a(void)
+{
+    uint8_t blob[2 + 13] = { 1, 1 };
+    put_entry(&blob[2], ID_A, ROF_ROLE_CHAMBER, 0.0f);
+    rof_storage_save(&flash, ROF_SENSOR_STORAGE_KEY, blob, sizeof(blob));
+    restart();
+}
+
+/* SEN-07 */
+static void test_duplicate_id_gives_one_channel_marked_duplicate(void)
+{
+    mock_temp_sensor_plug(&bus_mock, ID_A, "DS18B20", 20.0f);
+    mock_temp_sensor_plug(&bus_mock, ID_A, "DS18B20", 30.0f);
+
+    rof_sensor_registry_update(&reg);
+
+    TEST_ASSERT_EQUAL_size_t(1, rof_sensor_registry_channel_count(&reg));
+    TEST_ASSERT_TRUE(existing_channel(ID_A)->duplicate);
+    TEST_ASSERT_EQUAL_UINT(1, log_mock.count[ROF_LOG_ERROR]);
+}
+
+/* SEN-07: bei doppelter ID ist unklar, welcher Sensor antwortet. Kein Wert. */
+static void test_duplicate_assigned_sensor_reports_duplicate(void)
+{
+    plug_and_update(ID_A, 20.0f);
+    rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_CHAMBER);
+    mock_temp_sensor_plug(&bus_mock, ID_A, "DS18B20", 30.0f);
+    const unsigned reads_before = bus_mock.read_calls;
+
+    rof_sensor_registry_update(&reg);
+
+    float temp_c = -1.0f;
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_DUPLICATE, rof_sensor_registry_role(&reg, ROF_ROLE_CHAMBER, &temp_c));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, -1.0f, temp_c);
+    TEST_ASSERT_EQUAL_UINT(reads_before, bus_mock.read_calls);
+}
+
+/* SEN-07 */
+static void test_duplicate_is_logged_once_and_clears_when_resolved(void)
+{
+    plug_and_update(ID_A, 20.0f);
+    rof_sensor_registry_assign(&reg, ID_A, ROF_ROLE_CHAMBER);
+    mock_temp_sensor_plug(&bus_mock, ID_A, "DS18B20", 30.0f);
+    rof_sensor_registry_update(&reg);
+    rof_sensor_registry_update(&reg);
+    TEST_ASSERT_EQUAL_UINT(1, log_mock.count[ROF_LOG_ERROR]);
+
+    mock_temp_sensor_unplug(&bus_mock, ID_A); /* einer der beiden bleibt */
+    rof_sensor_registry_update(&reg);
+
+    float temp_c = 0.0f;
+    TEST_ASSERT_FALSE(existing_channel(ID_A)->duplicate);
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_OK, rof_sensor_registry_role(&reg, ROF_ROLE_CHAMBER, &temp_c));
+}
+
+/* SEN-07 */
+static void test_nine_sensors_fill_eight_channels_and_report_overflow(void)
+{
+    for (rof_sensor_id_t id = 1; id <= 9; id++) {
+        mock_temp_sensor_plug(&bus_mock, id, "DS18B20", 20.0f);
+    }
+
+    rof_sensor_registry_update(&reg);
+    rof_sensor_registry_update(&reg);
+
+    TEST_ASSERT_EQUAL_size_t(ROF_SENSOR_CHANNELS_MAX, rof_sensor_registry_channel_count(&reg));
+    TEST_ASSERT_NOT_NULL(channel_of(8));
+    TEST_ASSERT_NULL(channel_of(9));
+    TEST_ASSERT_TRUE(rof_sensor_registry_overflow(&reg));
+    TEST_ASSERT_EQUAL_UINT(1, log_mock.count[ROF_LOG_WARN]);
+}
+
+/* SEN-07: ein zugeordneter Sensor behält seinen Kanal, auch wenn er auf
+ * dem Bus hinter acht neuen Sensoren kommt */
+static void test_assigned_sensor_has_priority_over_new_sensors(void)
+{
+    for (rof_sensor_id_t id = 1; id <= 8; id++) {
+        mock_temp_sensor_plug(&bus_mock, id, "DS18B20", 20.0f);
+    }
+    mock_temp_sensor_plug(&bus_mock, ID_A, "DS18B20", 80.0f);
+    restart_with_chamber_a();
+
+    rof_sensor_registry_update(&reg);
+
+    float temp_c = 0.0f;
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_OK, rof_sensor_registry_role(&reg, ROF_ROLE_CHAMBER, &temp_c));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 80.0f, temp_c);
+    TEST_ASSERT_EQUAL_size_t(ROF_SENSOR_CHANNELS_MAX, rof_sensor_registry_channel_count(&reg));
+    TEST_ASSERT_NULL(channel_of(8));
+    TEST_ASSERT_TRUE(rof_sensor_registry_overflow(&reg));
+}
+
+/* SEN-07: hinter mehr als ROF_SENSOR_SCAN_MAX Sensoren wird ein zugeordneter
+ * Sensor nicht mehr gefunden. Er gilt dann als fehlend; das ist sicher. */
+static void test_assigned_sensor_beyond_scan_limit_counts_as_missing(void)
+{
+    for (rof_sensor_id_t id = 1; id <= ROF_SENSOR_SCAN_MAX; id++) {
+        mock_temp_sensor_plug(&bus_mock, id, "DS18B20", 20.0f);
+    }
+    mock_temp_sensor_plug(&bus_mock, ID_A, "DS18B20", 80.0f);
+    restart_with_chamber_a();
+
+    rof_sensor_registry_update(&reg);
+
+    float temp_c = 0.0f;
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_MISSING, rof_sensor_registry_role(&reg, ROF_ROLE_CHAMBER, &temp_c));
+    TEST_ASSERT_TRUE(rof_sensor_registry_overflow(&reg));
+}
+
+/* SEN-07 */
+static void test_overflow_clears_when_sensors_are_removed(void)
+{
+    for (rof_sensor_id_t id = 1; id <= 9; id++) {
+        mock_temp_sensor_plug(&bus_mock, id, "DS18B20", 20.0f);
+    }
+    rof_sensor_registry_update(&reg);
+
+    mock_temp_sensor_unplug(&bus_mock, 9);
+    rof_sensor_registry_update(&reg);
+
+    TEST_ASSERT_FALSE(rof_sensor_registry_overflow(&reg));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -686,6 +812,14 @@ int main(void)
     RUN_TEST(test_restored_role_is_missing_until_sensor_found);
     RUN_TEST(test_sensor_missing_at_start_is_logged);
     RUN_TEST(test_bus_error_makes_assigned_role_missing);
+
+    RUN_TEST(test_duplicate_id_gives_one_channel_marked_duplicate);
+    RUN_TEST(test_duplicate_assigned_sensor_reports_duplicate);
+    RUN_TEST(test_duplicate_is_logged_once_and_clears_when_resolved);
+    RUN_TEST(test_nine_sensors_fill_eight_channels_and_report_overflow);
+    RUN_TEST(test_assigned_sensor_has_priority_over_new_sensors);
+    RUN_TEST(test_assigned_sensor_beyond_scan_limit_counts_as_missing);
+    RUN_TEST(test_overflow_clears_when_sensors_are_removed);
 
     return UNITY_END();
 }
