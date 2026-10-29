@@ -41,7 +41,9 @@ typedef struct {
 typedef enum {
     ROF_FAULT_NONE = 0,
     ROF_FAULT_CHAMBER_UNASSIGNED, /* SAF-07: Garraum keinem Sensor zugeordnet */
-    ROF_FAULT_CHAMBER_MISSING     /* SAF-07: Garraumsensor fehlt */
+    ROF_FAULT_CHAMBER_MISSING,    /* SAF-07: Garraumsensor fehlt */
+    ROF_FAULT_CHAMBER_READ_ERROR, /* SAF-03: Lesefehler des Garraumsensors */
+    ROF_FAULT_CHAMBER_DUPLICATE   /* SAF-03: ID des Garraumsensors doppelt */
 } rof_fault_t;
 
 /* Was der Regelzyklus der Sicherheitslogik je Zyklus übergibt. */

@@ -27,18 +27,27 @@ static const char *const FAULT_TEXT[] = {
     [ROF_FAULT_NONE] = "",
     [ROF_FAULT_CHAMBER_UNASSIGNED] = "Sicherer Zustand: Garraum keinem Sensor zugeordnet",
     [ROF_FAULT_CHAMBER_MISSING] = "Sicherer Zustand: Garraumsensor fehlt",
+    [ROF_FAULT_CHAMBER_READ_ERROR] = "Sicherer Zustand: Lesefehler des Garraumsensors",
+    [ROF_FAULT_CHAMBER_DUPLICATE] = "Sicherer Zustand: ID des Garraumsensors doppelt",
 };
 
-/* SAF-07 */
+/* SAF-07 und SAF-03: Rollenstatus des Garraums. Ein unbekannter Status
+ * gilt als Lesefehler, damit er nie als gültig durchgeht. */
 static rof_fault_t chamber_fault(rof_role_status_t status)
 {
-    if (status == ROF_ROLE_STATUS_UNASSIGNED) {
+    switch (status) {
+    case ROF_ROLE_STATUS_OK:
+        return ROF_FAULT_NONE;
+    case ROF_ROLE_STATUS_UNASSIGNED:
         return ROF_FAULT_CHAMBER_UNASSIGNED;
-    }
-    if (status == ROF_ROLE_STATUS_MISSING) {
+    case ROF_ROLE_STATUS_MISSING:
         return ROF_FAULT_CHAMBER_MISSING;
+    case ROF_ROLE_STATUS_DUPLICATE:
+        return ROF_FAULT_CHAMBER_DUPLICATE;
+    case ROF_ROLE_STATUS_READ_ERROR:
+    default:
+        return ROF_FAULT_CHAMBER_READ_ERROR;
     }
-    return ROF_FAULT_NONE;
 }
 
 /* Erste Regel, die auslöst, in der Reihenfolge von rof_fault_t. */

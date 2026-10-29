@@ -168,7 +168,7 @@ static void test_new_safety_is_not_tripped(void)
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.6f, rof_safety_limit_duty(&safety, 0.6f));
 }
 
-/* SAF-07 nicht auslösen: Garraum zugeordnet und gelesen */
+/* SAF-03 und SAF-07 nicht auslösen: Garraum zugeordnet und fehlerfrei gelesen */
 static void test_valid_chamber_does_not_trip(void)
 {
     rof_safety_input_t in = chamber_ok(80.0f, 0.5f);
@@ -220,6 +220,33 @@ static void test_first_cause_is_kept(void)
     TEST_ASSERT_EQUAL_UINT(1, log_mock.count[ROF_LOG_ERROR]);
 }
 
+/* ---- Lesefehler und doppelte ID (SAF-03) -------------------------------- */
+
+/* SAF-03 auslösen: Lesefehler des Garraumsensors */
+static void test_chamber_read_error_trips(void)
+{
+    rof_safety_input_t in = chamber_with(ROF_ROLE_STATUS_READ_ERROR);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_CHAMBER_READ_ERROR, rof_safety_evaluate(&safety, &in));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, rof_safety_limit_duty(&safety, 0.6f));
+}
+
+/* SAF-03 auslösen: ID doppelt, der Wert ist nicht eindeutig (E-013) */
+static void test_chamber_duplicate_trips(void)
+{
+    rof_safety_input_t in = chamber_with(ROF_ROLE_STATUS_DUPLICATE);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_CHAMBER_DUPLICATE, rof_safety_evaluate(&safety, &in));
+}
+
+/* SAF-03: ein unbekannter Status gilt als Lesefehler, nicht als gültig */
+static void test_unknown_chamber_status_counts_as_read_error(void)
+{
+    rof_safety_input_t in = chamber_with((rof_role_status_t)99);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_CHAMBER_READ_ERROR, rof_safety_evaluate(&safety, &in));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -238,6 +265,10 @@ int main(void)
     RUN_TEST(test_missing_chamber_trips);
     RUN_TEST(test_trip_stays_latched_after_cause_is_gone);
     RUN_TEST(test_first_cause_is_kept);
+
+    RUN_TEST(test_chamber_read_error_trips);
+    RUN_TEST(test_chamber_duplicate_trips);
+    RUN_TEST(test_unknown_chamber_status_counts_as_read_error);
 
     return UNITY_END();
 }
