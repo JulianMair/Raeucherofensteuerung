@@ -30,6 +30,7 @@ static const char *const FAULT_TEXT[] = {
     [ROF_FAULT_CHAMBER_READ_ERROR] = "Sicherer Zustand: Lesefehler des Garraumsensors",
     [ROF_FAULT_CHAMBER_DUPLICATE] = "Sicherer Zustand: ID des Garraumsensors doppelt",
     [ROF_FAULT_IMPLAUSIBLE] = "Sicherer Zustand: Garraumwert unplausibel",
+    [ROF_FAULT_OVER_TEMPERATURE] = "Sicherer Zustand: Übertemperatur im Garraum",
 };
 
 /* SAF-07 und SAF-03: Rollenstatus des Garraums. Ein unbekannter Status
@@ -67,6 +68,10 @@ static rof_fault_t find_fault(const rof_safety_t *safety, const rof_safety_input
     }
     if (!is_plausible(&safety->config, input->chamber_temp_c)) {
         return ROF_FAULT_IMPLAUSIBLE;
+    }
+    /* SAF-06: unabhängig von Konfiguration und Ausgang */
+    if (input->chamber_temp_c > ROF_SAFETY_HARD_MAX_C) {
+        return ROF_FAULT_OVER_TEMPERATURE;
     }
     return ROF_FAULT_NONE;
 }

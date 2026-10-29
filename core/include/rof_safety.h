@@ -44,7 +44,8 @@ typedef enum {
     ROF_FAULT_CHAMBER_MISSING,    /* SAF-07: Garraumsensor fehlt */
     ROF_FAULT_CHAMBER_READ_ERROR, /* SAF-03: Lesefehler des Garraumsensors */
     ROF_FAULT_CHAMBER_DUPLICATE,  /* SAF-03: ID des Garraumsensors doppelt */
-    ROF_FAULT_IMPLAUSIBLE         /* SAF-04: Garraumwert außerhalb des plausiblen Bereichs */
+    ROF_FAULT_IMPLAUSIBLE,        /* SAF-04: Garraumwert außerhalb des plausiblen Bereichs */
+    ROF_FAULT_OVER_TEMPERATURE    /* SAF-06: Garraum über ROF_SAFETY_HARD_MAX_C */
 } rof_fault_t;
 
 /* Was der Regelzyklus der Sicherheitslogik je Zyklus übergibt. */

@@ -285,6 +285,38 @@ static void test_plausible_range_is_configurable(void)
     TEST_ASSERT_EQUAL(ROF_FAULT_IMPLAUSIBLE, evaluate_fresh(-1.0f));
 }
 
+/* ---- Übertemperatur (SAF-06) -------------------------------------------- */
+
+/* SAF-06 nicht auslösen: genau an der harten Grenze */
+static void test_temperature_at_hard_limit_does_not_trip(void)
+{
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, evaluate_fresh(ROF_SAFETY_HARD_MAX_C));
+}
+
+/* SAF-06 auslösen: über der harten Grenze, auch wenn der Wert noch plausibel ist */
+static void test_temperature_above_hard_limit_trips(void)
+{
+    TEST_ASSERT_EQUAL(ROF_FAULT_OVER_TEMPERATURE, evaluate_fresh(120.01f));
+    TEST_ASSERT_EQUAL(ROF_FAULT_OVER_TEMPERATURE, evaluate_fresh(125.0f));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, rof_safety_limit_duty(&safety, 0.6f));
+}
+
+/* SAF-06: die harte Grenze hängt nicht von der Konfiguration ab */
+static void test_hard_limit_ignores_wider_config(void)
+{
+    config.plausible_max_c = 200.0f;
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_OVER_TEMPERATURE, evaluate_fresh(150.0f));
+}
+
+/* SAF-06: wirkt auch bei Ausgang 0, z. B. bei einem klemmenden Relais */
+static void test_over_temperature_trips_with_output_off(void)
+{
+    rof_safety_input_t in = chamber_ok(121.0f, 0.0f);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_OVER_TEMPERATURE, rof_safety_evaluate(&safety, &in));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -311,6 +343,11 @@ int main(void)
     RUN_TEST(test_plausible_values_do_not_trip);
     RUN_TEST(test_implausible_values_trip);
     RUN_TEST(test_plausible_range_is_configurable);
+
+    RUN_TEST(test_temperature_at_hard_limit_does_not_trip);
+    RUN_TEST(test_temperature_above_hard_limit_trips);
+    RUN_TEST(test_hard_limit_ignores_wider_config);
+    RUN_TEST(test_over_temperature_trips_with_output_off);
 
     return UNITY_END();
 }
