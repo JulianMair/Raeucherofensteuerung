@@ -72,3 +72,28 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 **Vom Nutzer geändert oder abgelehnt:** nichts.
 
 **Nach dem Push:** Der CI-Lauf #3 war rot. cppcheck 2.13 auf dem Runner meldete eine doppelte NULL-Prüfung in einem Test (`nullPointerRedundantCheck`), die cppcheck 2.22 lokal nicht meldete. Das CI-Log hat Claude auf Wunsch des Nutzers über Claude in Chrome gelesen, weil GitHub es nur angemeldet herausgibt. Ein Versuch, cppcheck 2.13 lokal aus dem Quellcode zu bauen, war vom Berechtigungssystem blockiert worden. Nach dem Fix (`test(sensors): drop redundant null checks before existing_channel`) war Lauf #4 grün.
+
+## 2026-10-29 – M3 Sicherheitslogik
+
+**Modell:** Claude Opus 5.5
+
+**Von der KI erzeugt:**
+- Plan für M3 mit Rückfragen zu Plausibilität, Grenzwerten, Watchdog und CI
+- Sicherheitslogik `core/include/rof_safety.h` und `core/safety/rof_safety.c`, testgetrieben Regel für Regel: jeweils erst die Tests mit rotem Lauf, dann die Implementierung
+- 38 Unity-Tests in `test/test_safety.c`, jede Regel mit Tests für Auslösen und Nichtauslösen
+- Abdeckungsmessung: CMake-Option `ROF_COVERAGE`, Target `coverage` mit gcovr, Skript `test/coverage/reset_counters.cmake`, CI-Schritt mit 100 Prozent Zeilen und Zweigen für `core/safety`
+- cppcheck-Funde als GitHub-Annotationen, relative Pfade, Zeitlimit von 15 Minuten für den CI-Job
+- Entscheidungen E-016 bis E-019, Ursachen im Glossar, Nachweise für SAF-01 bis SAF-12
+
+**Vom Nutzer entschieden:**
+- Plausibilität nur für den Garraum
+- Grenzwerte: harte Grenze 120 °C, plausibel −20 bis 125 °C, Sollwert 20 bis 110 °C, eingefroren bei weniger als 0,05 °C Änderung in 10 Minuten, Zeitfenster 3 Sekunden
+- Der Watchdog misst den Abstand der Zyklen
+- cppcheck-Annotationen und Zeitlimit in CI
+- Plan für M3 ohne Änderungen freigegeben
+
+**Auffälligkeiten beim Umsetzen:**
+- `isnan()` erzeugte auf macOS Zweige, die ein `float` nie nimmt. Statt sie von der Messung auszunehmen, erkennt der Code NaN jetzt über Vergleiche (E-017).
+- Eine veraltete gcov-Zählerdatei verfälschte einmal die lokale Messung. Das Target `coverage` löscht die Zähler seitdem vor jeder Messung.
+
+**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M3 ergänzt.
