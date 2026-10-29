@@ -317,6 +317,100 @@ static void test_over_temperature_trips_with_output_off(void)
     TEST_ASSERT_EQUAL(ROF_FAULT_OVER_TEMPERATURE, rof_safety_evaluate(&safety, &in));
 }
 
+/* ---- Eingefrorener Wert (SAF-05) ---------------------------------------- */
+
+#define ONE_SECOND_MS 1000u
+#define TEN_MINUTES_S 600u
+
+/* Lässt die Uhr in Schritten von 1 s laufen und wertet jeden Zyklus mit
+ * derselben Eingabe aus, wie ein Regeltask. Liefert das letzte Ergebnis. */
+static rof_fault_t run_seconds(rof_safety_input_t in, unsigned seconds)
+{
+    rof_fault_t result = rof_safety_fault(&safety);
+    for (unsigned i = 0; i < seconds; i++) {
+        fake_clock_advance(&clock_fake, ONE_SECOND_MS);
+        result = rof_safety_evaluate(&safety, &in);
+    }
+    return result;
+}
+
+/* SAF-05 auslösen: Ausgang aktiv, Wert 10 Minuten unverändert */
+static void test_unchanged_value_with_output_on_trips_after_timeout(void)
+{
+    rof_safety_input_t heating = chamber_ok(50.0f, 0.5f);
+    rof_safety_evaluate(&safety, &heating);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, run_seconds(heating, TEN_MINUTES_S - 1));
+    TEST_ASSERT_EQUAL(ROF_FAULT_FROZEN, run_seconds(heating, 1));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, rof_safety_limit_duty(&safety, 0.5f));
+}
+
+/* SAF-05 auslösen: Schwankungen unter der Mindeständerung zählen nicht */
+static void test_changes_below_threshold_count_as_frozen(void)
+{
+    rof_safety_input_t heating = chamber_ok(50.0f, 0.5f);
+    rof_safety_input_t jitter = chamber_ok(50.04f, 0.5f);
+    rof_safety_evaluate(&safety, &heating);
+
+    for (unsigned i = 0; i < TEN_MINUTES_S / 2; i++) {
+        run_seconds(jitter, 1);
+        run_seconds(heating, 1);
+    }
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_FROZEN, rof_safety_fault(&safety));
+}
+
+/* SAF-05 nicht auslösen: eine echte Änderung startet die Zeit neu, steigend und fallend */
+static void test_real_change_restarts_the_timer(void)
+{
+    rof_safety_input_t heating = chamber_ok(50.0f, 0.5f);
+    rof_safety_input_t one_step_up = chamber_ok(50.0625f, 0.5f);
+    rof_safety_input_t back_down = chamber_ok(50.0f, 0.5f);
+    rof_safety_evaluate(&safety, &heating);
+
+    run_seconds(heating, 500);
+    run_seconds(one_step_up, 500);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, run_seconds(back_down, 500));
+}
+
+/* SAF-05 nicht auslösen: bei Ausgang 0 darf der Wert stehen */
+static void test_unchanged_value_with_output_off_does_not_trip(void)
+{
+    rof_safety_input_t idle = chamber_ok(21.0f, 0.0f);
+    rof_safety_evaluate(&safety, &idle);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, run_seconds(idle, 6 * TEN_MINUTES_S));
+}
+
+/* SAF-05 nicht auslösen: Ausgang 0 setzt die Zeit zurück */
+static void test_output_off_restarts_the_timer(void)
+{
+    rof_safety_input_t heating = chamber_ok(50.0f, 0.5f);
+    rof_safety_input_t off = chamber_ok(50.0f, 0.0f);
+    rof_safety_evaluate(&safety, &heating);
+
+    run_seconds(heating, 500);
+    run_seconds(off, 1);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, run_seconds(heating, 500));
+}
+
+/* SAF-05: Zeit und Mindeständerung sind konfigurierbar */
+static void test_freeze_limits_are_configurable(void)
+{
+    config.freeze_timeout_ms = 5u * ONE_SECOND_MS;
+    config.freeze_min_change_c = 1.0f;
+    TEST_ASSERT_EQUAL(ROF_OK, rof_safety_init(&safety, &config, &clk_if, &logger_if));
+    rof_safety_input_t heating = chamber_ok(50.0f, 0.5f);
+    rof_safety_input_t small_step = chamber_ok(50.5f, 0.5f);
+    rof_safety_evaluate(&safety, &heating);
+
+    run_seconds(small_step, 4);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_FROZEN, run_seconds(heating, 1));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -348,6 +442,13 @@ int main(void)
     RUN_TEST(test_temperature_above_hard_limit_trips);
     RUN_TEST(test_hard_limit_ignores_wider_config);
     RUN_TEST(test_over_temperature_trips_with_output_off);
+
+    RUN_TEST(test_unchanged_value_with_output_on_trips_after_timeout);
+    RUN_TEST(test_changes_below_threshold_count_as_frozen);
+    RUN_TEST(test_real_change_restarts_the_timer);
+    RUN_TEST(test_unchanged_value_with_output_off_does_not_trip);
+    RUN_TEST(test_output_off_restarts_the_timer);
+    RUN_TEST(test_freeze_limits_are_configurable);
 
     return UNITY_END();
 }

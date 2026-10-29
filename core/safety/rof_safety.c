@@ -31,6 +31,7 @@ static const char *const FAULT_TEXT[] = {
     [ROF_FAULT_CHAMBER_DUPLICATE] = "Sicherer Zustand: ID des Garraumsensors doppelt",
     [ROF_FAULT_IMPLAUSIBLE] = "Sicherer Zustand: Garraumwert unplausibel",
     [ROF_FAULT_OVER_TEMPERATURE] = "Sicherer Zustand: Übertemperatur im Garraum",
+    [ROF_FAULT_FROZEN] = "Sicherer Zustand: Garraumwert eingefroren",
 };
 
 /* SAF-07 und SAF-03: Rollenstatus des Garraums. Ein unbekannter Status
@@ -58,9 +59,28 @@ static bool is_plausible(const rof_safety_config_t *c, float temp_c)
     return temp_c >= c->plausible_min_c && temp_c <= c->plausible_max_c;
 }
 
+/* SAF-05: Eingefroren heißt, der Ausgang ist aktiv und der Wert hat sich
+ * seit freeze_timeout_ms nicht um freeze_min_change_c geändert. Ohne
+ * Bezugswert, bei Ausgang 0 oder bei einer echten Änderung beginnt die
+ * Zeit neu, mit dem aktuellen Wert als Bezug. */
+static bool is_frozen(rof_safety_t *safety, float temp_c, float duty, uint64_t now_ms)
+{
+    const rof_safety_config_t *c = &safety->config;
+    const float change_c = temp_c - safety->reference_c;
+    const bool changed = change_c >= c->freeze_min_change_c || change_c <= -c->freeze_min_change_c;
+    if (!safety->has_reference || !(duty > 0.0f) || changed) {
+        safety->has_reference = true;
+        safety->reference_c = temp_c;
+        safety->reference_ms = now_ms;
+        return false;
+    }
+    return now_ms - safety->reference_ms >= c->freeze_timeout_ms;
+}
+
 /* Erste Regel, die auslöst, in der Reihenfolge von rof_fault_t. Ab der
  * Plausibilität ist chamber_temp_c gültig, weil der Status OK ist. */
-static rof_fault_t find_fault(const rof_safety_t *safety, const rof_safety_input_t *input)
+static rof_fault_t find_fault(rof_safety_t *safety, const rof_safety_input_t *input,
+                              uint64_t now_ms)
 {
     const rof_fault_t chamber = chamber_fault(input->chamber_status);
     if (chamber != ROF_FAULT_NONE) {
@@ -72,6 +92,9 @@ static rof_fault_t find_fault(const rof_safety_t *safety, const rof_safety_input
     /* SAF-06: unabhängig von Konfiguration und Ausgang */
     if (input->chamber_temp_c > ROF_SAFETY_HARD_MAX_C) {
         return ROF_FAULT_OVER_TEMPERATURE;
+    }
+    if (is_frozen(safety, input->chamber_temp_c, input->applied_duty, now_ms)) {
+        return ROF_FAULT_FROZEN;
     }
     return ROF_FAULT_NONE;
 }
@@ -125,7 +148,8 @@ rof_setpoint_check_t rof_safety_check_setpoint(const rof_safety_t *safety, float
 
 rof_fault_t rof_safety_evaluate(rof_safety_t *safety, const rof_safety_input_t *input)
 {
-    const rof_fault_t active = find_fault(safety, input);
+    const uint64_t now_ms = rof_clock_now_ms(safety->clk);
+    const rof_fault_t active = find_fault(safety, input, now_ms);
     if (active != ROF_FAULT_NONE && safety->fault == ROF_FAULT_NONE) {
         safety->fault = active;
         rof_log_write(safety->logger, ROF_LOG_ERROR, FAULT_TEXT[active]);

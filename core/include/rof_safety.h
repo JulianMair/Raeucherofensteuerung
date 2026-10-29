@@ -17,6 +17,7 @@
 #include "rof_sensor_registry.h"
 #include "rof_status.h"
 
+#include <stdbool.h>
 #include <stdint.h>
 
 /* Harte Obergrenze für den Garraum in °C (SAF-06). Bewusst kein Teil
@@ -45,7 +46,8 @@ typedef enum {
     ROF_FAULT_CHAMBER_READ_ERROR, /* SAF-03: Lesefehler des Garraumsensors */
     ROF_FAULT_CHAMBER_DUPLICATE,  /* SAF-03: ID des Garraumsensors doppelt */
     ROF_FAULT_IMPLAUSIBLE,        /* SAF-04: Garraumwert außerhalb des plausiblen Bereichs */
-    ROF_FAULT_OVER_TEMPERATURE    /* SAF-06: Garraum über ROF_SAFETY_HARD_MAX_C */
+    ROF_FAULT_OVER_TEMPERATURE,   /* SAF-06: Garraum über ROF_SAFETY_HARD_MAX_C */
+    ROF_FAULT_FROZEN              /* SAF-05: Garraumwert bei aktivem Ausgang eingefroren */
 } rof_fault_t;
 
 /* Was der Regelzyklus der Sicherheitslogik je Zyklus übergibt. */
@@ -60,6 +62,10 @@ typedef struct {
     const rof_clock_t *clk;
     const rof_log_t *logger;
     rof_fault_t fault; /* verriegelte Ursache, ROF_FAULT_NONE wenn nicht ausgelöst */
+    /* SAF-05: Bezugswert, seit dem die Zeit ohne Änderung läuft */
+    bool has_reference;
+    float reference_c;
+    uint64_t reference_ms;
 } rof_safety_t;
 
 /* Ergebnis der Sollwertprüfung (SAF-09). Abgelehnt wird mit Grund, nie begrenzt. */
