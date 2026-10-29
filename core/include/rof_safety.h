@@ -106,4 +106,12 @@ float rof_safety_limit_duty(const rof_safety_t *safety, float requested_duty);
 /* Die verriegelte Ursache, ROF_FAULT_NONE wenn nicht ausgelöst. */
 rof_fault_t rof_safety_fault(const rof_safety_t *safety);
 
+/* Manueller Reset des sicheren Zustands (SAF-02). Prüft alle Regeln mit
+ * der aktuellen Eingabe; die Zeit für eingefrorene Werte beginnt dabei neu.
+ * Löst keine Regel aus, ist die Verriegelung aufgehoben und das Ergebnis
+ * ROF_FAULT_NONE. Sonst bleibt die Verriegelung mit ihrer ersten Ursache,
+ * und das Ergebnis ist die Ursache, die jetzt besteht.
+ * Ohne Verriegelung tut die Funktion nichts und liefert ROF_FAULT_NONE. */
+rof_fault_t rof_safety_reset(rof_safety_t *safety, const rof_safety_input_t *input);
+
 #endif /* ROF_SAFETY_H */

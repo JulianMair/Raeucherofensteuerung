@@ -177,3 +177,21 @@ rof_fault_t rof_safety_fault(const rof_safety_t *safety)
 {
     return safety->fault;
 }
+
+rof_fault_t rof_safety_reset(rof_safety_t *safety, const rof_safety_input_t *input)
+{
+    if (safety->fault == ROF_FAULT_NONE) {
+        return ROF_FAULT_NONE;
+    }
+    /* Ohne Bezugswert beginnt die Zeit für eingefrorene Werte neu, sonst
+     * würde der alte, eingefrorene Bezug sofort wieder auslösen. */
+    safety->has_reference = false;
+    const rof_fault_t active = find_fault(safety, input, rof_clock_now_ms(safety->clk));
+    if (active != ROF_FAULT_NONE) {
+        rof_log_write(safety->logger, ROF_LOG_WARN, "Reset abgelehnt: Ursache besteht noch");
+        return active;
+    }
+    safety->fault = ROF_FAULT_NONE;
+    rof_log_write(safety->logger, ROF_LOG_INFO, "Sicherer Zustand zurückgesetzt");
+    return ROF_FAULT_NONE;
+}

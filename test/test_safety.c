@@ -455,6 +455,80 @@ static void test_cycle_window_is_configurable(void)
     TEST_ASSERT_EQUAL(ROF_FAULT_CYCLE_OVERRUN, cycle_after(1001));
 }
 
+/* ---- Reset (SAF-02) ----------------------------------------------------- */
+
+/* SAF-02: solange die Ursache besteht, bleibt der sichere Zustand */
+static void test_reset_while_cause_persists_is_rejected(void)
+{
+    rof_safety_input_t missing = chamber_with(ROF_ROLE_STATUS_MISSING);
+    rof_safety_evaluate(&safety, &missing);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_CHAMBER_MISSING, rof_safety_reset(&safety, &missing));
+    TEST_ASSERT_EQUAL(ROF_FAULT_CHAMBER_MISSING, rof_safety_fault(&safety));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, rof_safety_limit_duty(&safety, 0.6f));
+    TEST_ASSERT_EQUAL_UINT(1, log_mock.count[ROF_LOG_WARN]);
+}
+
+/* SAF-02: ein abgelehnter Reset nennt die Ursache, die jetzt besteht.
+ * Verriegelt bleibt die erste Ursache. */
+static void test_rejected_reset_reports_the_current_cause(void)
+{
+    rof_safety_input_t missing = chamber_with(ROF_ROLE_STATUS_MISSING);
+    rof_safety_input_t too_hot = chamber_ok(121.0f, 0.0f);
+    rof_safety_evaluate(&safety, &missing);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_OVER_TEMPERATURE, rof_safety_reset(&safety, &too_hot));
+    TEST_ASSERT_EQUAL(ROF_FAULT_CHAMBER_MISSING, rof_safety_fault(&safety));
+}
+
+/* SAF-02: Reset durch den Nutzer und Ursache weg, dann ist der Ausgang frei */
+static void test_reset_after_cause_is_gone_releases_output(void)
+{
+    rof_safety_input_t missing = chamber_with(ROF_ROLE_STATUS_MISSING);
+    rof_safety_input_t ok = chamber_ok(60.0f, 0.0f);
+    rof_safety_evaluate(&safety, &missing);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, rof_safety_reset(&safety, &ok));
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, rof_safety_fault(&safety));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.6f, rof_safety_limit_duty(&safety, 0.6f));
+    TEST_ASSERT_EQUAL_UINT(1, log_mock.count[ROF_LOG_INFO]);
+}
+
+static void test_reset_without_trip_does_nothing(void)
+{
+    rof_safety_input_t ok = chamber_ok(60.0f, 0.0f);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, rof_safety_reset(&safety, &ok));
+    TEST_ASSERT_EQUAL_UINT(0, log_mock.count[ROF_LOG_INFO]);
+    TEST_ASSERT_EQUAL_UINT(0, log_mock.count[ROF_LOG_WARN]);
+}
+
+/* SAF-02, SAF-05: nach dem Reset beginnt die Zeit für eingefrorene Werte neu */
+static void test_reset_restarts_the_freeze_timer(void)
+{
+    rof_safety_input_t heating = chamber_ok(50.0f, 0.5f);
+    rof_safety_evaluate(&safety, &heating);
+    TEST_ASSERT_EQUAL(ROF_FAULT_FROZEN, run_seconds(heating, TEN_MINUTES_S));
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, rof_safety_reset(&safety, &heating));
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, run_seconds(heating, TEN_MINUTES_S - 1));
+    TEST_ASSERT_EQUAL(ROF_FAULT_FROZEN, run_seconds(heating, 1));
+}
+
+/* SAF-02: nach einem Reset löst eine neue Ursache wieder aus */
+static void test_safety_trips_again_after_reset(void)
+{
+    rof_safety_input_t missing = chamber_with(ROF_ROLE_STATUS_MISSING);
+    rof_safety_input_t ok = chamber_ok(60.0f, 0.0f);
+    rof_safety_input_t read_error = chamber_with(ROF_ROLE_STATUS_READ_ERROR);
+    rof_safety_evaluate(&safety, &missing);
+    rof_safety_reset(&safety, &ok);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_CHAMBER_READ_ERROR, rof_safety_evaluate(&safety, &read_error));
+    TEST_ASSERT_EQUAL_UINT(2, log_mock.count[ROF_LOG_ERROR]);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -498,6 +572,13 @@ int main(void)
     RUN_TEST(test_cycle_gap_over_window_trips);
     RUN_TEST(test_first_cycle_has_no_window);
     RUN_TEST(test_cycle_window_is_configurable);
+
+    RUN_TEST(test_reset_while_cause_persists_is_rejected);
+    RUN_TEST(test_rejected_reset_reports_the_current_cause);
+    RUN_TEST(test_reset_after_cause_is_gone_releases_output);
+    RUN_TEST(test_reset_without_trip_does_nothing);
+    RUN_TEST(test_reset_restarts_the_freeze_timer);
+    RUN_TEST(test_safety_trips_again_after_reset);
 
     return UNITY_END();
 }
