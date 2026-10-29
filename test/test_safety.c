@@ -247,6 +247,44 @@ static void test_unknown_chamber_status_counts_as_read_error(void)
     TEST_ASSERT_EQUAL(ROF_FAULT_CHAMBER_READ_ERROR, rof_safety_evaluate(&safety, &in));
 }
 
+/* ---- Plausibilität (SAF-04) --------------------------------------------- */
+
+/* Frisch initialisieren und genau einen Zyklus mit diesem Garraumwert
+ * auswerten. Nötig, weil jede Auslösung verriegelt. */
+static rof_fault_t evaluate_fresh(float temp_c)
+{
+    TEST_ASSERT_EQUAL(ROF_OK, rof_safety_init(&safety, &config, &clk_if, &logger_if));
+    rof_safety_input_t in = chamber_ok(temp_c, 0.0f);
+    return rof_safety_evaluate(&safety, &in);
+}
+
+/* SAF-04 nicht auslösen: Werte im plausiblen Bereich, Grenzen eingeschlossen */
+static void test_plausible_values_do_not_trip(void)
+{
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, evaluate_fresh(-20.0f));
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, evaluate_fresh(21.5f));
+    /* 125 °C ist noch plausibel. Was dort sonst auslöst, prüft SAF-06. */
+    TEST_ASSERT_NOT_EQUAL(ROF_FAULT_IMPLAUSIBLE, evaluate_fresh(125.0f));
+}
+
+/* SAF-04 auslösen: außerhalb des plausiblen Bereichs oder kein Zahlenwert */
+static void test_implausible_values_trip(void)
+{
+    TEST_ASSERT_EQUAL(ROF_FAULT_IMPLAUSIBLE, evaluate_fresh(-20.01f));
+    TEST_ASSERT_EQUAL(ROF_FAULT_IMPLAUSIBLE, evaluate_fresh(125.01f));
+    TEST_ASSERT_EQUAL(ROF_FAULT_IMPLAUSIBLE, evaluate_fresh(NAN));
+    TEST_ASSERT_EQUAL(ROF_FAULT_IMPLAUSIBLE, evaluate_fresh(-INFINITY));
+}
+
+/* SAF-04: die Grenzen sind konfigurierbar */
+static void test_plausible_range_is_configurable(void)
+{
+    config.plausible_min_c = 0.0f;
+    config.setpoint_min_c = 20.0f;
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_IMPLAUSIBLE, evaluate_fresh(-1.0f));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -269,6 +307,10 @@ int main(void)
     RUN_TEST(test_chamber_read_error_trips);
     RUN_TEST(test_chamber_duplicate_trips);
     RUN_TEST(test_unknown_chamber_status_counts_as_read_error);
+
+    RUN_TEST(test_plausible_values_do_not_trip);
+    RUN_TEST(test_implausible_values_trip);
+    RUN_TEST(test_plausible_range_is_configurable);
 
     return UNITY_END();
 }

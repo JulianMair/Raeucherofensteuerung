@@ -29,6 +29,7 @@ static const char *const FAULT_TEXT[] = {
     [ROF_FAULT_CHAMBER_MISSING] = "Sicherer Zustand: Garraumsensor fehlt",
     [ROF_FAULT_CHAMBER_READ_ERROR] = "Sicherer Zustand: Lesefehler des Garraumsensors",
     [ROF_FAULT_CHAMBER_DUPLICATE] = "Sicherer Zustand: ID des Garraumsensors doppelt",
+    [ROF_FAULT_IMPLAUSIBLE] = "Sicherer Zustand: Garraumwert unplausibel",
 };
 
 /* SAF-07 und SAF-03: Rollenstatus des Garraums. Ein unbekannter Status
@@ -50,10 +51,24 @@ static rof_fault_t chamber_fault(rof_role_status_t status)
     }
 }
 
-/* Erste Regel, die auslöst, in der Reihenfolge von rof_fault_t. */
-static rof_fault_t find_fault(const rof_safety_input_t *input)
+/* SAF-04. So formuliert, dass auch NaN unplausibel ist. */
+static bool is_plausible(const rof_safety_config_t *c, float temp_c)
 {
-    return chamber_fault(input->chamber_status);
+    return temp_c >= c->plausible_min_c && temp_c <= c->plausible_max_c;
+}
+
+/* Erste Regel, die auslöst, in der Reihenfolge von rof_fault_t. Ab der
+ * Plausibilität ist chamber_temp_c gültig, weil der Status OK ist. */
+static rof_fault_t find_fault(const rof_safety_t *safety, const rof_safety_input_t *input)
+{
+    const rof_fault_t chamber = chamber_fault(input->chamber_status);
+    if (chamber != ROF_FAULT_NONE) {
+        return chamber;
+    }
+    if (!is_plausible(&safety->config, input->chamber_temp_c)) {
+        return ROF_FAULT_IMPLAUSIBLE;
+    }
+    return ROF_FAULT_NONE;
 }
 
 /* ---- Öffentliche Funktionen --------------------------------------------- */
@@ -105,7 +120,7 @@ rof_setpoint_check_t rof_safety_check_setpoint(const rof_safety_t *safety, float
 
 rof_fault_t rof_safety_evaluate(rof_safety_t *safety, const rof_safety_input_t *input)
 {
-    const rof_fault_t active = find_fault(input);
+    const rof_fault_t active = find_fault(safety, input);
     if (active != ROF_FAULT_NONE && safety->fault == ROF_FAULT_NONE) {
         safety->fault = active;
         rof_log_write(safety->logger, ROF_LOG_ERROR, FAULT_TEXT[active]);
