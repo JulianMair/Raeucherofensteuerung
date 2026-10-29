@@ -7,7 +7,7 @@ build-cov/
 *.gcda
 *.gcno
 *.gcov
-coverage/
+/coverage/
 
 # Firmware (ESP-IDF)
 # sdkconfig enthält die echte Konfiguration, später auch das WLAN-Passwort.
