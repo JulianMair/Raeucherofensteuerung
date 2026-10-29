@@ -21,18 +21,18 @@ Alle Anforderungen stammen aus `CLAUDE.md`. Jede hat eine feste ID aus Bereich u
 
 | ID | Anforderung | Meilenstein | Nachweis |
 |---|---|---|---|
-| SAF-01 | Eigenes Modul `core/safety`, in jedem Regelzyklus vor dem Regler ausgewertet | M3 | offen |
-| SAF-02 | Bei Fehler ist der Ausgang 0, und `SICHERER_ZUSTAND` bleibt gesetzt, bis manuell zurückgesetzt wird und die Ursache weg ist | M3 | offen |
-| SAF-03 | Auslöser: Lesefehler eines Sensors mit Sicherheitsrolle (Garraum) | M3 | offen |
-| SAF-04 | Auslöser: Wert außerhalb des plausiblen Bereichs, Grenzen konfigurierbar | M3 | offen |
-| SAF-05 | Auslöser: eingefrorener Wert, also keine Änderung über eine konfigurierbare Zeit bei aktivem Ausgang | M3 | offen |
-| SAF-06 | Auslöser: Übertemperatur über einer harten Grenze, die nicht über die API änderbar ist | M3 | offen |
-| SAF-07 | Auslöser: Garraumsensor fehlt oder ist keinem Kanal zugeordnet | M3 | offen |
-| SAF-08 | Auslöser: Regelzyklus überschreitet sein Zeitfenster (Watchdog) | M3 | offen |
-| SAF-09 | Sollwerte außerhalb der Grenzen werden abgelehnt, nicht begrenzt, und der Grund wird gemeldet | M3, M6 | offen |
+| SAF-01 | Eigenes Modul `core/safety`, in jedem Regelzyklus vor dem Regler ausgewertet | M3, M5 | teilweise: `rof_safety_evaluate()` prüft alle Regeln je Zyklus (`test_safety`). Dass der Regelzyklus sie vor dem Regler aufruft, wird in M5 belegt |
+| SAF-02 | Bei Fehler ist der Ausgang 0, und `SICHERER_ZUSTAND` bleibt gesetzt, bis manuell zurückgesetzt wird und die Ursache weg ist | M3 | `test_trip_stays_latched_after_cause_is_gone`, `test_first_cause_is_kept`, `test_reset_while_cause_persists_is_rejected`, `test_reset_after_cause_is_gone_releases_output`, `test_reset_restarts_the_freeze_timer`; Ausgang 0 über `rof_safety_limit_duty()` in jedem Auslöse-Test. Dass der Regelzyklus diesen Wert setzt, wird in M5 belegt |
+| SAF-03 | Auslöser: Lesefehler eines Sensors mit Sicherheitsrolle (Garraum) | M3 | auslösen: `test_chamber_read_error_trips`, `test_chamber_duplicate_trips`, `test_unknown_chamber_status_counts_as_read_error`; nicht auslösen: `test_valid_chamber_does_not_trip` |
+| SAF-04 | Auslöser: Wert außerhalb des plausiblen Bereichs, Grenzen konfigurierbar | M3 | auslösen: `test_implausible_values_trip`, `test_plausible_range_is_configurable`; nicht auslösen: `test_plausible_values_do_not_trip` |
+| SAF-05 | Auslöser: eingefrorener Wert, also keine Änderung über eine konfigurierbare Zeit bei aktivem Ausgang | M3 | auslösen: `test_unchanged_value_with_output_on_trips_after_timeout`, `test_changes_below_threshold_count_as_frozen`, `test_freeze_limits_are_configurable`; nicht auslösen: `test_real_change_restarts_the_timer`, `test_unchanged_value_with_output_off_does_not_trip`, `test_output_off_restarts_the_timer` |
+| SAF-06 | Auslöser: Übertemperatur über einer harten Grenze, die nicht über die API änderbar ist | M3 | auslösen: `test_temperature_above_hard_limit_trips`, `test_hard_limit_ignores_wider_config`, `test_over_temperature_trips_with_output_off`; nicht auslösen: `test_temperature_at_hard_limit_does_not_trip`. Nicht über die API änderbar: Konstante `ROF_SAFETY_HARD_MAX_C`, kein Feld der Konfiguration (E-016) |
+| SAF-07 | Auslöser: Garraumsensor fehlt oder ist keinem Kanal zugeordnet | M3 | auslösen: `test_unassigned_chamber_trips`, `test_missing_chamber_trips`; nicht auslösen: `test_valid_chamber_does_not_trip`. Den Rollenstatus liefert die Sensorverwaltung (SEN-05) |
+| SAF-08 | Auslöser: Regelzyklus überschreitet sein Zeitfenster (Watchdog) | M3 | auslösen: `test_cycle_gap_over_window_trips`, `test_cycle_window_is_configurable`; nicht auslösen: `test_cycles_within_window_do_not_trip`, `test_first_cycle_has_no_window` |
+| SAF-09 | Sollwerte außerhalb der Grenzen werden abgelehnt, nicht begrenzt, und der Grund wird gemeldet | M3, M6 | teilweise: `test_setpoint_within_limits_is_ok`, `test_setpoint_outside_limits_is_rejected_with_reason`. Die Meldung des Grunds über die API folgt in M6 |
 | SAF-10 | Nach einem Neustart startet das System immer in `BEREIT` mit Ausgang 0. Die Heizung läuft erst nach erneutem Start | M4, M7 | offen |
-| SAF-11 | Jede Regel hat mindestens einen Test für Auslösen und einen für Nichtauslösen | M3 | offen |
-| SAF-12 | Zweigabdeckung von `core/safety` 100 Prozent, gemessen mit gcov in CI | M3 | offen |
+| SAF-11 | Jede Regel hat mindestens einen Test für Auslösen und einen für Nichtauslösen | M3 | jede Regel SAF-03 bis SAF-08 hat Tests für Auslösen und Nichtauslösen, siehe dort |
+| SAF-12 | Zweigabdeckung von `core/safety` 100 Prozent, gemessen mit gcov in CI | M3 | CMake-Target `coverage` (gcovr, nur `core/safety`, Zeilen und Zweige 100 Prozent), CI-Schritt „Abdeckung core/safety“ (E-017) |
 | SAF-13 | Integrationstest auf dem Host belegt die Entkopplung: Befehlsqueue geflutet bzw. kein Befehl mehr, die Regelung hält die Temperatur im Simulator trotzdem | M5 | offen |
 
 ## SEN – Sensorverwaltung (Abschnitt 3)
@@ -92,7 +92,7 @@ Alle Anforderungen stammen aus `CLAUDE.md`. Jede hat eine feste ID aus Bereich u
 
 | ID | Anforderung | Meilenstein | Nachweis |
 |---|---|---|---|
-| CI-01 | Host: CMake-Build, ctest, gcov für `core/safety`, cppcheck, Prüfung der Include-Regeln | M0, M1, M3 | teilweise: `.github/workflows/ci.yml`, Job `host` mit Build, ctest (inklusive Include-Prüfung) und cppcheck. gcov folgt in M3 |
+| CI-01 | Host: CMake-Build, ctest, gcov für `core/safety`, cppcheck, Prüfung der Include-Regeln | M0, M1, M3 | `.github/workflows/ci.yml`, Job `host`: Build, ctest (inklusive Include-Prüfung), cppcheck, gcov-Abdeckung von `core/safety` |
 | CI-02 | CI prüft, dass core und proto keinen ESP- oder FreeRTOS-Header einbinden und dass `firmware/net` keine Treiber einbindet. Bei Verstoß schlägt der Build fehl | M1, M8 | ctest `include_rules` mit sieben Gegenproben `include_rules_detects_*` und `include_rules_accepts_clean_tree`. Der Pfad `firmware/net` wird in M8 gegen die echte Struktur geprüft |
 | CI-03 | Web: `npm ci`, Lint, Typprüfung, Vitest, Build, Größenbudget | M9 | offen |
 | CI-04 | Firmware: `idf.py build` im Container `espressif/idf` mit fester Version | M7 | offen |

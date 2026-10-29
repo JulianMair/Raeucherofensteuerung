@@ -152,6 +152,22 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
   - Ausnahmen per Kommentar (`GCOVR_EXCL_BR_LINE`): Sie würden 100 Prozent vortäuschen, ohne dass jeder Zweig getestet ist.
   - Abdeckung über alle Module: Gefordert ist sie für `core/safety`. Eine Grenze für alle würde Fehler in der Sicherheitslogik hinter gut abgedeckten anderen Modulen verstecken.
 
+## E-018 Aufbau der Sicherheitslogik (M3)
+
+- **Kontext:** Die Sicherheitslogik muss in jedem Regelzyklus vor dem Regler laufen, bei einem Fehler den Ausgang auf 0 halten und erst nach einem manuellen Reset bei behobener Ursache wieder freigeben (SAF-01, SAF-02). Sie braucht 100 Prozent Zweigabdeckung (SAF-12).
+- **Entscheidung:**
+  - Die Eingabe je Zyklus ist ein einfaches Struct `rof_safety_input_t` mit Rollenstatus und Wert des Garraums und dem angelegten Tastgrad. Die Sicherheitslogik ruft die Sensorverwaltung nicht selbst auf. Das hält sie klein, voll testbar und unabhängig vom Ablauf im Regelzyklus.
+  - Die erste auslösende Ursache wird verriegelt und einmal geloggt. Spätere Ursachen ändern sie nicht, damit der Grund der Abschaltung erhalten bleibt.
+  - `rof_safety_limit_duty()` liefert 0, solange verriegelt ist. Der Regelzyklus gibt jeden Tastgrad durch diese Funktion, bevor er ihn setzt (wird in M5 belegt).
+  - Ein Reset prüft alle Regeln mit der aktuellen Eingabe. Er hebt die Verriegelung nur auf, wenn keine Regel auslöst, und startet die Zeit für eingefrorene Werte neu.
+  - Der Watchdog misst den Abstand zwischen zwei Zyklen, nicht die Dauer eines Zyklus (vom Nutzer gewählt). So fällt auch ein Regeltask auf, der gar nicht mehr drankommt.
+  - Ein unbekannter Rollenstatus gilt als Lesefehler, nie als gültig.
+  - Logtexte stehen in einer Tabelle statt in einem `switch`, damit Logging keine Zweige erzeugt, die nur für die Abdeckung getestet werden müssten.
+- **Verworfen:**
+  - Die Sicherheitslogik liest die Sensorverwaltung selbst: Sie hinge dann an deren Ablauf, und Tests bräuchten eine vollständige Sensorverwaltung.
+  - Die letzte statt der ersten Ursache verriegeln: Folgefehler würden den eigentlichen Grund überschreiben.
+  - Den Ausgang direkt über `rof_output_t` abschalten: Dann gäbe es zwei Stellen, die den Ausgang setzen. Der Regelzyklus bleibt die einzige.
+
 ## E-019 cppcheck-Funde als GitHub-Annotationen, Zeitlimit für den CI-Job (M3)
 
 - **Kontext:** In M2 meldete cppcheck 2.13 auf dem Runner einen Fund, den cppcheck 2.22 lokal nicht meldete. Das CI-Log gibt GitHub nur angemeldet heraus, Claude konnte den Fund deshalb nicht selbst lesen. Außerdem hing ein Lauf 7 Minuten an einem langsamen Paketspiegel; ohne Grenze darf ein Job 6 Stunden laufen.

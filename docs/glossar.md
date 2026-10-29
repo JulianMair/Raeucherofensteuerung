@@ -26,6 +26,21 @@ Zustand einer Rolle, den die Sensorverwaltung meldet. Alles außer „in Ordnung
 | Lesefehler | `ROF_ROLE_STATUS_READ_ERROR` | Sensor da, Messung fehlgeschlagen |
 | doppelt | `ROF_ROLE_STATUS_DUPLICATE` | ID mehrfach gemeldet, Wert nicht eindeutig |
 
+## Ursachen des sicheren Zustands (SAF-03 bis SAF-08)
+
+In Prüfreihenfolge. Die erste Ursache, die auslöst, wird verriegelt.
+
+| Deutsch | Code | Anforderung |
+|---|---|---|
+| Garraum keinem Sensor zugeordnet | `ROF_FAULT_CHAMBER_UNASSIGNED` | SAF-07 |
+| Garraumsensor fehlt | `ROF_FAULT_CHAMBER_MISSING` | SAF-07 |
+| Lesefehler des Garraumsensors | `ROF_FAULT_CHAMBER_READ_ERROR` | SAF-03 |
+| ID des Garraumsensors doppelt | `ROF_FAULT_CHAMBER_DUPLICATE` | SAF-03 |
+| Wert unplausibel | `ROF_FAULT_IMPLAUSIBLE` | SAF-04 |
+| Übertemperatur | `ROF_FAULT_OVER_TEMPERATURE` | SAF-06 |
+| Wert eingefroren | `ROF_FAULT_FROZEN` | SAF-05 |
+| Regelzyklus überschreitet sein Zeitfenster | `ROF_FAULT_CYCLE_OVERRUN` | SAF-08 |
+
 ## Zustände (CTL-04)
 
 | Deutsch (CLAUDE.md) | Code |
@@ -60,3 +75,9 @@ Zustand einer Rolle, den die Sensorverwaltung meldet. Alles außer „in Ordnung
 | Sensorverwaltung | `sensor_registry` |
 | Rohwert | `raw_c` (Messwert ohne Offset) |
 | Überlauf | `overflow` (mehr Sensoren als Kanäle) |
+| Verriegelung, verriegeln | `fault` ist gesetzt, `latch` im Kommentar (der sichere Zustand bleibt bis zum Reset) |
+| harte Grenze | `ROF_SAFETY_HARD_MAX_C` |
+| plausibler Bereich | `plausible_min_c`, `plausible_max_c` |
+| Zeitfenster des Regelzyklus | `cycle_window_ms` |
+| Bezugswert (eingefrorener Wert) | `reference_c`, `reference_ms` |
+| Sollwertprüfung | `rof_safety_check_setpoint`, Ergebnis `rof_setpoint_check_t` |
