@@ -9,6 +9,8 @@ on:
 jobs:
   host:
     runs-on: ubuntu-24.04
+    # Ein hängender Paketspiegel soll den Job nicht stundenlang blockieren (E-019)
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -17,8 +19,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends cmake ninja-build cppcheck gcovr
 
+      # cppcheck gibt Funde als Workflow-Befehle aus. GitHub zeigt sie als
+      # Annotationen am Commit, lesbar auch ohne Anmeldung (E-019).
       - name: Konfigurieren
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            "-DROF_CPPCHECK_TEMPLATE=::error file={file},line={line},col={column},title=cppcheck {id}::{severity}: {message}"
 
       - name: Bauen
         run: cmake --build build

@@ -151,3 +151,14 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
 - **Verworfen:**
   - Ausnahmen per Kommentar (`GCOVR_EXCL_BR_LINE`): Sie würden 100 Prozent vortäuschen, ohne dass jeder Zweig getestet ist.
   - Abdeckung über alle Module: Gefordert ist sie für `core/safety`. Eine Grenze für alle würde Fehler in der Sicherheitslogik hinter gut abgedeckten anderen Modulen verstecken.
+
+## E-019 cppcheck-Funde als GitHub-Annotationen, Zeitlimit für den CI-Job (M3)
+
+- **Kontext:** In M2 meldete cppcheck 2.13 auf dem Runner einen Fund, den cppcheck 2.22 lokal nicht meldete. Das CI-Log gibt GitHub nur angemeldet heraus, Claude konnte den Fund deshalb nicht selbst lesen. Außerdem hing ein Lauf 7 Minuten an einem langsamen Paketspiegel; ohne Grenze darf ein Job 6 Stunden laufen.
+- **Entscheidung:** Vom Nutzer gewählt:
+  - Die Cache-Variable `ROF_CPPCHECK_TEMPLATE` setzt das Ausgabeformat von cppcheck. CI setzt sie auf das Format eines GitHub-Workflow-Befehls (`::error file=…,line=…::…`). GitHub zeigt jeden Fund dann als Annotation am Commit, und die Annotationen sind über die API ohne Anmeldung lesbar. Lokal bleibt das gewohnte Format.
+  - cppcheck gibt Pfade relativ zum Projekt aus (`--relative-paths`). Das braucht die Annotation, und lokal ist es lesbarer.
+  - Der CI-Job bricht nach 15 Minuten ab (`timeout-minutes`).
+- **Verworfen:**
+  - In CI und lokal dieselbe cppcheck-Version erzwingen: Ubuntu liefert 2.13, Homebrew die aktuelle Version. Eine eigene Version in CI zu bauen kostet bei jedem Lauf Minuten.
+  - Die Funde als Datei-Artefakt hochladen: Artefakte gibt GitHub ebenfalls nur angemeldet heraus.

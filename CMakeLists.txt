@@ -29,8 +29,15 @@ add_subdirectory(test)
 # Prüft alle Dateien aus compile_commands.json, Unity ausgenommen.
 # constParameterCallback ist abgeschaltet: Callbacks müssen exakt die Signatur
 # des Interfaces haben, und ctx ist dort bewusst nicht const (siehe E-007).
+# ROF_CPPCHECK_TEMPLATE ändert das Ausgabeformat der Funde. CI nutzt das,
+# um sie als GitHub-Annotationen auszugeben (E-019). Leer heißt Standard.
+set(ROF_CPPCHECK_TEMPLATE "" CACHE STRING "Ausgabeformat für cppcheck-Funde")
 find_program(CPPCHECK_EXE cppcheck)
 if(CPPCHECK_EXE)
+    set(CPPCHECK_TEMPLATE_ARG "")
+    if(ROF_CPPCHECK_TEMPLATE)
+        set(CPPCHECK_TEMPLATE_ARG "--template=${ROF_CPPCHECK_TEMPLATE}")
+    endif()
     add_custom_target(cppcheck
         COMMAND ${CPPCHECK_EXE}
             --project=${CMAKE_BINARY_DIR}/compile_commands.json
@@ -42,6 +49,8 @@ if(CPPCHECK_EXE)
             -i ${CMAKE_SOURCE_DIR}/test/vendor
             --suppress=*:*/test/vendor/*
             --suppress=constParameterCallback
+            --relative-paths=${CMAKE_SOURCE_DIR}
+            ${CPPCHECK_TEMPLATE_ARG}
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         VERBATIM
         USES_TERMINAL)
