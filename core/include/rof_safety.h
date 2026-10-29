@@ -14,6 +14,7 @@
 
 #include "rof_clock.h"
 #include "rof_log.h"
+#include "rof_sensor_registry.h"
 #include "rof_status.h"
 
 #include <stdint.h>
@@ -36,10 +37,25 @@ typedef struct {
     uint32_t cycle_window_ms;    /* SAF-08: größter erlaubter Abstand zweier Regelzyklen */
 } rof_safety_config_t;
 
+/* Ursache einer Auslösung. Die Reihenfolge ist die Prüfreihenfolge. */
+typedef enum {
+    ROF_FAULT_NONE = 0,
+    ROF_FAULT_CHAMBER_UNASSIGNED, /* SAF-07: Garraum keinem Sensor zugeordnet */
+    ROF_FAULT_CHAMBER_MISSING     /* SAF-07: Garraumsensor fehlt */
+} rof_fault_t;
+
+/* Was der Regelzyklus der Sicherheitslogik je Zyklus übergibt. */
+typedef struct {
+    rof_role_status_t chamber_status; /* aus rof_sensor_registry_role() */
+    float chamber_temp_c;             /* nur bei ROF_ROLE_STATUS_OK gültig */
+    float applied_duty;               /* Tastgrad, der seit dem letzten Zyklus anlag */
+} rof_safety_input_t;
+
 typedef struct {
     rof_safety_config_t config;
     const rof_clock_t *clk;
     const rof_log_t *logger;
+    rof_fault_t fault; /* verriegelte Ursache, ROF_FAULT_NONE wenn nicht ausgelöst */
 } rof_safety_t;
 
 /* Ergebnis der Sollwertprüfung (SAF-09). Abgelehnt wird mit Grund, nie begrenzt. */
@@ -63,5 +79,17 @@ rof_status_t rof_safety_init(rof_safety_t *safety, const rof_safety_config_t *co
                              const rof_clock_t *clk, const rof_log_t *logger);
 
 rof_setpoint_check_t rof_safety_check_setpoint(const rof_safety_t *safety, float setpoint_c);
+
+/* Prüft alle Regeln für diesen Zyklus (SAF-01). Löst eine Regel aus und
+ * ist noch nichts verriegelt, verriegelt das Modul mit dieser Ursache und
+ * loggt sie. Liefert die verriegelte Ursache, ROF_FAULT_NONE wenn frei. */
+rof_fault_t rof_safety_evaluate(rof_safety_t *safety, const rof_safety_input_t *input);
+
+/* Der Tastgrad, der tatsächlich an den Ausgang darf: 0, solange
+ * verriegelt ist, sonst requested_duty (SAF-02). */
+float rof_safety_limit_duty(const rof_safety_t *safety, float requested_duty);
+
+/* Die verriegelte Ursache, ROF_FAULT_NONE wenn nicht ausgelöst. */
+rof_fault_t rof_safety_fault(const rof_safety_t *safety);
 
 #endif /* ROF_SAFETY_H */

@@ -19,6 +19,34 @@ static bool config_is_valid(const rof_safety_config_t *c)
            c->cycle_window_ms > 0;
 }
 
+/* ---- Regeln ------------------------------------------------------------- */
+
+/* Logtext je Ursache. Eine Tabelle statt switch: keine Zweige, die die
+ * Abdeckungsmessung zählen müsste. */
+static const char *const FAULT_TEXT[] = {
+    [ROF_FAULT_NONE] = "",
+    [ROF_FAULT_CHAMBER_UNASSIGNED] = "Sicherer Zustand: Garraum keinem Sensor zugeordnet",
+    [ROF_FAULT_CHAMBER_MISSING] = "Sicherer Zustand: Garraumsensor fehlt",
+};
+
+/* SAF-07 */
+static rof_fault_t chamber_fault(rof_role_status_t status)
+{
+    if (status == ROF_ROLE_STATUS_UNASSIGNED) {
+        return ROF_FAULT_CHAMBER_UNASSIGNED;
+    }
+    if (status == ROF_ROLE_STATUS_MISSING) {
+        return ROF_FAULT_CHAMBER_MISSING;
+    }
+    return ROF_FAULT_NONE;
+}
+
+/* Erste Regel, die auslöst, in der Reihenfolge von rof_fault_t. */
+static rof_fault_t find_fault(const rof_safety_input_t *input)
+{
+    return chamber_fault(input->chamber_status);
+}
+
 /* ---- Öffentliche Funktionen --------------------------------------------- */
 
 rof_safety_config_t rof_safety_default_config(void)
@@ -64,4 +92,27 @@ rof_setpoint_check_t rof_safety_check_setpoint(const rof_safety_t *safety, float
      * Bewusst ohne isnan(): Das Makro erzeugt je nach Plattform Zweige
      * für double und long double, die ein float nie nimmt (E-017). */
     return ROF_SETPOINT_NOT_A_NUMBER;
+}
+
+rof_fault_t rof_safety_evaluate(rof_safety_t *safety, const rof_safety_input_t *input)
+{
+    const rof_fault_t active = find_fault(input);
+    if (active != ROF_FAULT_NONE && safety->fault == ROF_FAULT_NONE) {
+        safety->fault = active;
+        rof_log_write(safety->logger, ROF_LOG_ERROR, FAULT_TEXT[active]);
+    }
+    return safety->fault;
+}
+
+float rof_safety_limit_duty(const rof_safety_t *safety, float requested_duty)
+{
+    if (safety->fault != ROF_FAULT_NONE) {
+        return 0.0f;
+    }
+    return requested_duty;
+}
+
+rof_fault_t rof_safety_fault(const rof_safety_t *safety)
+{
+    return safety->fault;
 }

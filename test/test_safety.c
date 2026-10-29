@@ -143,6 +143,83 @@ static void test_setpoint_outside_limits_is_rejected_with_reason(void)
     TEST_ASSERT_EQUAL(ROF_SETPOINT_NOT_A_NUMBER, rof_safety_check_setpoint(&safety, NAN));
 }
 
+/* ---- Auswerten und Verriegeln ------------------------------------------- */
+
+/* Eingabe mit gültigem Garraumwert */
+static rof_safety_input_t chamber_ok(float temp_c, float duty)
+{
+    return (rof_safety_input_t){
+        .chamber_status = ROF_ROLE_STATUS_OK,
+        .chamber_temp_c = temp_c,
+        .applied_duty = duty,
+    };
+}
+
+/* Eingabe mit Garraumstatus, aber ohne gültigen Wert */
+static rof_safety_input_t chamber_with(rof_role_status_t status)
+{
+    return (rof_safety_input_t){ .chamber_status = status, .chamber_temp_c = 0.0f };
+}
+
+/* SAF-02: nach init ist nichts verriegelt */
+static void test_new_safety_is_not_tripped(void)
+{
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, rof_safety_fault(&safety));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.6f, rof_safety_limit_duty(&safety, 0.6f));
+}
+
+/* SAF-07 nicht auslösen: Garraum zugeordnet und gelesen */
+static void test_valid_chamber_does_not_trip(void)
+{
+    rof_safety_input_t in = chamber_ok(80.0f, 0.5f);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, rof_safety_evaluate(&safety, &in));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.6f, rof_safety_limit_duty(&safety, 0.6f));
+    TEST_ASSERT_EQUAL_UINT(0, log_mock.count[ROF_LOG_ERROR]);
+}
+
+/* SAF-07 auslösen: Garraum keinem Sensor zugeordnet */
+static void test_unassigned_chamber_trips(void)
+{
+    rof_safety_input_t in = chamber_with(ROF_ROLE_STATUS_UNASSIGNED);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_CHAMBER_UNASSIGNED, rof_safety_evaluate(&safety, &in));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, rof_safety_limit_duty(&safety, 0.6f));
+    TEST_ASSERT_EQUAL_UINT(1, log_mock.count[ROF_LOG_ERROR]);
+}
+
+/* SAF-07 auslösen: Garraumsensor fehlt */
+static void test_missing_chamber_trips(void)
+{
+    rof_safety_input_t in = chamber_with(ROF_ROLE_STATUS_MISSING);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_CHAMBER_MISSING, rof_safety_evaluate(&safety, &in));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, rof_safety_limit_duty(&safety, 1.0f));
+}
+
+/* SAF-02: die Verriegelung bleibt, auch wenn die Ursache verschwindet */
+static void test_trip_stays_latched_after_cause_is_gone(void)
+{
+    rof_safety_input_t missing = chamber_with(ROF_ROLE_STATUS_MISSING);
+    rof_safety_input_t ok = chamber_ok(80.0f, 0.5f);
+    rof_safety_evaluate(&safety, &missing);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_CHAMBER_MISSING, rof_safety_evaluate(&safety, &ok));
+    TEST_ASSERT_EQUAL(ROF_FAULT_CHAMBER_MISSING, rof_safety_fault(&safety));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, rof_safety_limit_duty(&safety, 0.6f));
+}
+
+/* SAF-02: die erste Ursache bleibt stehen und wird nur einmal geloggt */
+static void test_first_cause_is_kept(void)
+{
+    rof_safety_input_t missing = chamber_with(ROF_ROLE_STATUS_MISSING);
+    rof_safety_input_t unassigned = chamber_with(ROF_ROLE_STATUS_UNASSIGNED);
+    rof_safety_evaluate(&safety, &missing);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_CHAMBER_MISSING, rof_safety_evaluate(&safety, &unassigned));
+    TEST_ASSERT_EQUAL_UINT(1, log_mock.count[ROF_LOG_ERROR]);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -154,6 +231,13 @@ int main(void)
 
     RUN_TEST(test_setpoint_within_limits_is_ok);
     RUN_TEST(test_setpoint_outside_limits_is_rejected_with_reason);
+
+    RUN_TEST(test_new_safety_is_not_tripped);
+    RUN_TEST(test_valid_chamber_does_not_trip);
+    RUN_TEST(test_unassigned_chamber_trips);
+    RUN_TEST(test_missing_chamber_trips);
+    RUN_TEST(test_trip_stays_latched_after_cause_is_gone);
+    RUN_TEST(test_first_cause_is_kept);
 
     return UNITY_END();
 }
