@@ -12,6 +12,10 @@ add_executable(test_sensor_registry test_sensor_registry.c)
 target_link_libraries(test_sensor_registry PRIVATE unity rof_core platform_host project_warnings)
 add_test(NAME sensor_registry COMMAND test_sensor_registry)
 
+add_executable(test_safety test_safety.c)
+target_link_libraries(test_safety PRIVATE unity rof_core platform_host project_warnings)
+add_test(NAME safety COMMAND test_safety)
+
 # Include-Regeln (CI-02): Prüfung des echten Projekts plus Gegenproben.
 # Jede Gegenprobe ist ein kleiner Ordner mit einem absichtlichen Verstoß.
 # Sie besteht nur, wenn genau die erwartete Meldung erscheint.
