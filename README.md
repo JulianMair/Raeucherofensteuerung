@@ -34,7 +34,17 @@ ctest --test-dir build --output-on-failure
 cmake --build build --target cppcheck
 ```
 
-ctest führt die Unity-Tests und die Prüfung der Include-Regeln (`test/include_rules/`) aus. Dieselben Schritte laufen in CI (`.github/workflows/ci.yml`) bei jedem Push.
+ctest führt die Unity-Tests und die Prüfung der Include-Regeln (`test/include_rules/`) aus.
+
+Abdeckung von `core/safety` (muss bei Zeilen und Zweigen 100 Prozent sein), in einem eigenen Build-Ordner:
+
+```bash
+cmake -S . -B build-cov -G Ninja -DCMAKE_BUILD_TYPE=Debug -DROF_COVERAGE=ON
+cmake --build build-cov
+cmake --build build-cov --target coverage
+```
+
+Dieselben Schritte laufen in CI (`.github/workflows/ci.yml`) bei jedem Push. Lokal misst Apples `gcov` (LLVM), in CI misst GCC; maßgeblich ist CI.
 
 ## Dokumentation
 

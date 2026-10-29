@@ -15,6 +15,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_library(project_warnings INTERFACE)
 target_compile_options(project_warnings INTERFACE -Wall -Wextra -Wpedantic -Werror)
 
+# Abdeckungsmessung (SAF-12). Eigener Build-Ordner, z. B.:
+#   cmake -S . -B build-cov -G Ninja -DROF_COVERAGE=ON
+#   cmake --build build-cov && cmake --build build-cov --target coverage
+option(ROF_COVERAGE "core mit gcov-Messung bauen" OFF)
+
 enable_testing()
 add_subdirectory(core)
 add_subdirectory(platform/host)
@@ -38,6 +43,26 @@ if(CPPCHECK_EXE)
             --suppress=*:*/test/vendor/*
             --suppress=constParameterCallback
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        VERBATIM
+        USES_TERMINAL)
+endif()
+
+# Abdeckung von core/safety: führt alle Tests aus und scheitert unter
+# 100 Prozent Zeilen- oder Zweigabdeckung (SAF-12, E-017). --delete löscht
+# die Zählerdateien danach, damit jeder Lauf frisch zählt.
+if(ROF_COVERAGE)
+    find_program(GCOVR_EXE gcovr REQUIRED)
+    add_custom_target(coverage
+        COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${CMAKE_BINARY_DIR} --output-on-failure
+        COMMAND ${GCOVR_EXE}
+            --root ${CMAKE_SOURCE_DIR}
+            --filter ${CMAKE_SOURCE_DIR}/core/safety/
+            --print-summary
+            --fail-under-line 100
+            --fail-under-branch 100
+            --delete
+            ${CMAKE_BINARY_DIR}
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         VERBATIM
         USES_TERMINAL)
 endif()

@@ -127,3 +127,27 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
 - **Kontext:** Die Sicherheitslogik in M3 und die Oberfläche in M9 müssen wissen, ob eine Rolle einen gültigen Wert hat, und wenn nicht, warum.
 - **Entscheidung:** `rof_sensor_registry_role()` liefert einen Status (`OK`, `UNASSIGNED`, `MISSING`, `READ_ERROR`, `DUPLICATE`) und schreibt die Temperatur nur bei `OK`. Ein Aufrufer kann einen ungültigen Wert so nicht versehentlich verwenden.
 - **Verworfen:** Ein `bool` mit Temperatur. Der Grund für den Fehler ginge verloren, und die Oberfläche könnte ihn nicht anzeigen.
+
+## E-016 Grenzwerte der Sicherheitslogik (M3)
+
+- **Kontext:** Die Sicherheitslogik braucht Grenzen für plausible Werte, Sollwerte, eingefrorene Werte und den Regelzyklus sowie eine harte Obergrenze (SAF-04 bis SAF-09).
+- **Entscheidung:** Vom Nutzer bestätigt:
+  - Harte Grenze 120 °C. Sie ist eine Konstante beim Bauen (`ROF_SAFETY_HARD_MAX_C`), nicht Teil der Konfiguration und damit nicht über die API änderbar (SAF-06). Sie liegt unter dem Messbereichsende des DS18B20 von 125 °C; eine Grenze darüber würde nie auslösen.
+  - Plausibel −20 bis 125 °C, nur für den Garraum, denn nur er hat eine Sicherheitsrolle.
+  - Sollwerte 20 bis 110 °C. `init` verlangt, dass der Sollwertbereich im plausiblen Bereich und echt unter der harten Grenze liegt, sonst würde ein erlaubter Sollwert die Sicherheitslogik auslösen.
+  - Eingefroren: weniger als 0,05 °C Änderung in 10 Minuten bei aktivem Ausgang. 0,05 °C liegt knapp unter einem Messschritt des DS18B20 (0,0625 °C), jeder Messschritt zählt also als Änderung.
+  - Zeitfenster des Regelzyklus 3 Sekunden.
+- **Verworfen:**
+  - Eine harte Grenze in der Konfiguration: Sie wäre über die API änderbar und widerspräche SAF-06.
+  - Plausibilität für alle Sensoren: Ein defekter Kernfühler würde die Heizung abschalten, obwohl die Heizung nur auf den Garraum wirkt.
+
+## E-017 Zweigabdeckung mit gcov und gcovr (M3)
+
+- **Kontext:** `core/safety` muss 100 Prozent Zweigabdeckung haben, gemessen mit gcov in CI (SAF-12).
+- **Entscheidung:**
+  - Die CMake-Option `ROF_COVERAGE` baut core mit `--coverage -O0` in einem eigenen Ordner `build-cov`. Das Target `coverage` führt alle Tests aus und lässt gcovr nur über `core/safety` laufen. Es scheitert unter 100 Prozent Zeilen oder Zweige. Lokal und in CI läuft derselbe Befehl, wie bei cppcheck (E-004).
+  - Zweige, die man aus C nicht erreicht, werden durch Umbau des Codes vermieden, nicht von der Messung ausgenommen. Beispiel: `isnan()` ist auf macOS ein Makro mit eigenen Zweigen für `double` und `long double`, die ein `float` nie nimmt. Die Sicherheitslogik erkennt NaN deshalb daran, dass jeder Vergleich mit NaN falsch ist.
+  - Maßgeblich ist die Messung in CI mit GCC. Lokal misst Apples gcov aus LLVM, das Zweige leicht anders zählen kann.
+- **Verworfen:**
+  - Ausnahmen per Kommentar (`GCOVR_EXCL_BR_LINE`): Sie würden 100 Prozent vortäuschen, ohne dass jeder Zweig getestet ist.
+  - Abdeckung über alle Module: Gefordert ist sie für `core/safety`. Eine Grenze für alle würde Fehler in der Sicherheitslogik hinter gut abgedeckten anderen Modulen verstecken.

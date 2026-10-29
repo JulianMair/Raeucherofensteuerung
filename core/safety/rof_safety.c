@@ -1,6 +1,5 @@
 #include "rof_safety.h"
 
-#include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -51,14 +50,18 @@ rof_status_t rof_safety_init(rof_safety_t *safety, const rof_safety_config_t *co
 
 rof_setpoint_check_t rof_safety_check_setpoint(const rof_safety_t *safety, float setpoint_c)
 {
-    if (isnan(setpoint_c)) {
-        return ROF_SETPOINT_NOT_A_NUMBER;
+    const rof_safety_config_t *c = &safety->config;
+    if (setpoint_c >= c->setpoint_min_c && setpoint_c <= c->setpoint_max_c) {
+        return ROF_SETPOINT_OK;
     }
-    if (setpoint_c < safety->config.setpoint_min_c) {
+    if (setpoint_c < c->setpoint_min_c) {
         return ROF_SETPOINT_TOO_LOW;
     }
-    if (setpoint_c > safety->config.setpoint_max_c) {
+    if (setpoint_c > c->setpoint_max_c) {
         return ROF_SETPOINT_TOO_HIGH;
     }
-    return ROF_SETPOINT_OK;
+    /* Jeder Vergleich mit NaN ist falsch, also bleibt hier nur NaN übrig.
+     * Bewusst ohne isnan(): Das Makro erzeugt je nach Plattform Zweige
+     * für double und long double, die ein float nie nimmt (E-017). */
+    return ROF_SETPOINT_NOT_A_NUMBER;
 }

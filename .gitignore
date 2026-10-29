@@ -1,5 +1,6 @@
-# Host-Build (CMake)
+# Host-Build (CMake), auch der Build mit Abdeckungsmessung
 build/
+build-cov/
 /compile_commands.json
 
 # Abdeckung (gcov, gcovr)
