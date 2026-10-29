@@ -411,6 +411,50 @@ static void test_freeze_limits_are_configurable(void)
     TEST_ASSERT_EQUAL(ROF_FAULT_FROZEN, run_seconds(heating, 1));
 }
 
+/* ---- Zeitfenster des Regelzyklus (SAF-08) ------------------------------- */
+
+/* Ein Zyklus nach delta_ms mit gültigem Garraum */
+static rof_fault_t cycle_after(uint64_t delta_ms)
+{
+    rof_safety_input_t in = chamber_ok(60.0f, 0.0f);
+    fake_clock_advance(&clock_fake, delta_ms);
+    return rof_safety_evaluate(&safety, &in);
+}
+
+/* SAF-08 nicht auslösen: Abstand genau am Zeitfenster */
+static void test_cycles_within_window_do_not_trip(void)
+{
+    cycle_after(0);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, cycle_after(1000));
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, cycle_after(3000));
+}
+
+/* SAF-08 auslösen: Abstand über dem Zeitfenster, z. B. blockierter Regeltask */
+static void test_cycle_gap_over_window_trips(void)
+{
+    cycle_after(0);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_CYCLE_OVERRUN, cycle_after(3001));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, rof_safety_limit_duty(&safety, 0.6f));
+}
+
+/* SAF-08 nicht auslösen: vor dem ersten Zyklus gibt es keinen Abstand */
+static void test_first_cycle_has_no_window(void)
+{
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, cycle_after(60000));
+}
+
+/* SAF-08: das Zeitfenster ist konfigurierbar */
+static void test_cycle_window_is_configurable(void)
+{
+    config.cycle_window_ms = 1000;
+    TEST_ASSERT_EQUAL(ROF_OK, rof_safety_init(&safety, &config, &clk_if, &logger_if));
+    cycle_after(0);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_CYCLE_OVERRUN, cycle_after(1001));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -449,6 +493,11 @@ int main(void)
     RUN_TEST(test_unchanged_value_with_output_off_does_not_trip);
     RUN_TEST(test_output_off_restarts_the_timer);
     RUN_TEST(test_freeze_limits_are_configurable);
+
+    RUN_TEST(test_cycles_within_window_do_not_trip);
+    RUN_TEST(test_cycle_gap_over_window_trips);
+    RUN_TEST(test_first_cycle_has_no_window);
+    RUN_TEST(test_cycle_window_is_configurable);
 
     return UNITY_END();
 }

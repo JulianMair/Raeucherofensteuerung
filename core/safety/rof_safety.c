@@ -32,6 +32,7 @@ static const char *const FAULT_TEXT[] = {
     [ROF_FAULT_IMPLAUSIBLE] = "Sicherer Zustand: Garraumwert unplausibel",
     [ROF_FAULT_OVER_TEMPERATURE] = "Sicherer Zustand: Übertemperatur im Garraum",
     [ROF_FAULT_FROZEN] = "Sicherer Zustand: Garraumwert eingefroren",
+    [ROF_FAULT_CYCLE_OVERRUN] = "Sicherer Zustand: Regelzyklus überschreitet sein Zeitfenster",
 };
 
 /* SAF-07 und SAF-03: Rollenstatus des Garraums. Ein unbekannter Status
@@ -96,6 +97,11 @@ static rof_fault_t find_fault(rof_safety_t *safety, const rof_safety_input_t *in
     if (is_frozen(safety, input->chamber_temp_c, input->applied_duty, now_ms)) {
         return ROF_FAULT_FROZEN;
     }
+    /* SAF-08: Abstand der Zyklen, nicht Dauer eines Zyklus. So fällt auch
+     * ein Regeltask auf, der gar nicht mehr drankommt (E-018). */
+    if (safety->has_last_cycle && now_ms - safety->last_cycle_ms > safety->config.cycle_window_ms) {
+        return ROF_FAULT_CYCLE_OVERRUN;
+    }
     return ROF_FAULT_NONE;
 }
 
@@ -150,6 +156,8 @@ rof_fault_t rof_safety_evaluate(rof_safety_t *safety, const rof_safety_input_t *
 {
     const uint64_t now_ms = rof_clock_now_ms(safety->clk);
     const rof_fault_t active = find_fault(safety, input, now_ms);
+    safety->has_last_cycle = true;
+    safety->last_cycle_ms = now_ms;
     if (active != ROF_FAULT_NONE && safety->fault == ROF_FAULT_NONE) {
         safety->fault = active;
         rof_log_write(safety->logger, ROF_LOG_ERROR, FAULT_TEXT[active]);

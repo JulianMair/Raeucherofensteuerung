@@ -47,7 +47,8 @@ typedef enum {
     ROF_FAULT_CHAMBER_DUPLICATE,  /* SAF-03: ID des Garraumsensors doppelt */
     ROF_FAULT_IMPLAUSIBLE,        /* SAF-04: Garraumwert außerhalb des plausiblen Bereichs */
     ROF_FAULT_OVER_TEMPERATURE,   /* SAF-06: Garraum über ROF_SAFETY_HARD_MAX_C */
-    ROF_FAULT_FROZEN              /* SAF-05: Garraumwert bei aktivem Ausgang eingefroren */
+    ROF_FAULT_FROZEN,             /* SAF-05: Garraumwert bei aktivem Ausgang eingefroren */
+    ROF_FAULT_CYCLE_OVERRUN       /* SAF-08: Abstand zum letzten Regelzyklus zu groß */
 } rof_fault_t;
 
 /* Was der Regelzyklus der Sicherheitslogik je Zyklus übergibt. */
@@ -66,6 +67,9 @@ typedef struct {
     bool has_reference;
     float reference_c;
     uint64_t reference_ms;
+    /* SAF-08: Zeitpunkt des letzten Zyklus */
+    bool has_last_cycle;
+    uint64_t last_cycle_ms;
 } rof_safety_t;
 
 /* Ergebnis der Sollwertprüfung (SAF-09). Abgelehnt wird mit Grund, nie begrenzt. */
