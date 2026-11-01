@@ -7,7 +7,7 @@ Exit-Code 0: alle Regeln eingehalten. Exit-Code 1: mindestens ein Verstoß.
 
 Regeln:
   core/          nur eigene Header aus core/ und die Standard-Header in CORE_STD
-  proto/         nur eigene Header, core/include und die C11-Standardbibliothek
+  proto/         nur eigene Header, core/include und die Standard-Header in PROTO_STD
   firmware/net/  keine Treiber: weder ESP-IDF "driver/..." noch Header aus platform/esp32/
 """
 import re
@@ -22,13 +22,10 @@ CORE_HINTS = {
     "stdio.h": "Ausgaben nur über rof_log_t",
 }
 
-C11_STD = {
-    "assert.h", "complex.h", "ctype.h", "errno.h", "fenv.h", "float.h", "inttypes.h",
-    "iso646.h", "limits.h", "locale.h", "math.h", "setjmp.h", "signal.h", "stdalign.h",
-    "stdarg.h", "stdatomic.h", "stdbool.h", "stddef.h", "stdint.h", "stdio.h", "stdlib.h",
-    "stdnoreturn.h", "string.h", "tgmath.h", "threads.h", "time.h", "uchar.h", "wchar.h",
-    "wctype.h",
-}
+# Standard-Header, die proto einbinden darf (E-030): snprintf aus stdio.h und
+# strtof aus stdlib.h braucht der JSON-Code, alles andere nicht.
+PROTO_STD = {"stdint.h", "stdbool.h", "stddef.h", "string.h", "float.h", "limits.h",
+             "stdio.h", "stdlib.h"}
 
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s*([<"])([^>"]+)[>"]')
 
@@ -73,10 +70,10 @@ def check_proto(root, violations):
         for line, bracket, name in includes(path):
             if bracket == '"' and exists_in(name, own):
                 continue
-            if bracket == "<" and name in C11_STD:
+            if bracket == "<" and name in PROTO_STD:
                 continue
             violations.append((path, line, name,
-                               "proto darf nur eigene Header, core/include und die C-Standardbibliothek einbinden"))
+                               "proto darf nur eigene Header, core/include und " + ", ".join(sorted(PROTO_STD)) + " einbinden"))
 
 
 def check_net(root, violations):

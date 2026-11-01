@@ -63,6 +63,7 @@ add_include_violation_test(core_freertos "core/include/bad.h:2: verbotenes Inclu
 add_include_violation_test(core_stdlib   "core/bad.c:2: verbotenes Include stdlib.h \\(kein malloc")
 add_include_violation_test(core_time     "core/bad.c:2: verbotenes Include time.h \\(Zeit nur")
 add_include_violation_test(proto_esp     "proto/bad.c:2: verbotenes Include esp_err.h")
+add_include_violation_test(proto_time    "proto/bad.c:2: verbotenes Include time.h")
 add_include_violation_test(net_driver    "firmware/net/bad.c:2: verbotenes Include driver/gpio.h")
 add_include_violation_test(net_platform  "firmware/net/bad.c:2: verbotenes Include ds18b20.h")
 
