@@ -51,6 +51,8 @@ static rof_state_t next_regular_state(const rof_fsm_t *fsm, float chamber_c)
             return ROF_STATE_IDLE; /* Ü5 */
         }
         return ROF_STATE_COOLING;
+    case ROF_STATE_FAULT:
+        return ROF_STATE_IDLE; /* Ü8: keine Ursache mehr aktiv */
     default:
         return fsm->state;
     }
@@ -157,5 +159,11 @@ rof_cmd_result_t rof_fsm_stop(rof_fsm_t *fsm)
 
 void rof_fsm_step(rof_fsm_t *fsm, const rof_fsm_input_t *input)
 {
+    if (input->active != ROF_FAULT_NONE) {
+        /* Ü7: Ursache aktiv, aber nicht verriegelt. Ohne gültigen Garraumwert
+         * gibt es keinen Normalbetrieb, also FEHLER mit Ausgang aus. */
+        enter(fsm, ROF_STATE_FAULT);
+        return;
+    }
     enter(fsm, next_regular_state(fsm, input->chamber_temp_c));
 }

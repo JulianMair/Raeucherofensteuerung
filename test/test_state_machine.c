@@ -303,6 +303,90 @@ static void test_stop_in_idle_does_nothing(void)
     TEST_ASSERT_EQUAL_UINT(0, log_mock.count[ROF_LOG_INFO]);
 }
 
+/* ---- FEHLER (E-020) ----------------------------------------------------- */
+
+/* Ein Regelzyklus mit aktiver, aber nicht verriegelter Ursache */
+static void step_active(rof_fault_t fault)
+{
+    rof_fsm_input_t in = { .latched = ROF_FAULT_NONE, .active = fault, .chamber_temp_c = 0.0f };
+    rof_fsm_step(&fsm, &in);
+}
+
+/* Ü7: BEREIT + aktiver Fehler -> FEHLER, Start gesperrt */
+static void test_u7_fault_in_idle_blocks_start(void)
+{
+    set_valid_setpoint();
+
+    step_active(ROF_FAULT_CHAMBER_MISSING);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_FAULT, rof_fsm_state(&fsm));
+    TEST_ASSERT_FALSE(rof_fsm_output_enabled(&fsm));
+    TEST_ASSERT_EQUAL(ROF_CMD_FAULT_ACTIVE, rof_fsm_start(&fsm));
+    TEST_ASSERT_EQUAL(ROF_STATE_FAULT, rof_fsm_state(&fsm));
+}
+
+/* Ü7: ABKUEHLEN + aktiver Fehler -> FEHLER */
+static void test_u7_fault_while_cooling(void)
+{
+    go_cooling();
+
+    step_active(ROF_FAULT_CHAMBER_READ_ERROR);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_FAULT, rof_fsm_state(&fsm));
+}
+
+/* Ü7 zur Absicherung: beim Heizen verriegelt die Sicherheitslogik eigentlich.
+ * Kommt trotzdem ein nur aktiver Fehler an, wird ebenfalls nicht geheizt. */
+static void test_u7_unlatched_fault_while_heating_stops_heating(void)
+{
+    go_heating();
+
+    step_active(ROF_FAULT_CHAMBER_MISSING);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_FAULT, rof_fsm_state(&fsm));
+    TEST_ASSERT_FALSE(rof_fsm_output_enabled(&fsm));
+}
+
+/* Ü7 zur Absicherung, aus HALTEN */
+static void test_u7_unlatched_fault_while_holding_stops_heating(void)
+{
+    go_holding();
+
+    step_active(ROF_FAULT_IMPLAUSIBLE);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_FAULT, rof_fsm_state(&fsm));
+}
+
+/* Nichtübergang zu Ü8: solange die Ursache besteht, bleibt FEHLER */
+static void test_fault_stays_while_cause_is_active(void)
+{
+    step_active(ROF_FAULT_CHAMBER_MISSING);
+
+    step_active(ROF_FAULT_CHAMBER_MISSING);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_FAULT, rof_fsm_state(&fsm));
+    TEST_ASSERT_EQUAL_UINT(1, log_mock.count[ROF_LOG_INFO]);
+}
+
+/* Ü8: FEHLER + kein Fehler mehr aktiv -> BEREIT, ohne Reset */
+static void test_u8_fault_clears_to_idle(void)
+{
+    step_active(ROF_FAULT_CHAMBER_MISSING);
+
+    step_ok(21.0f);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_IDLE, rof_fsm_state(&fsm));
+}
+
+/* Stopp in FEHLER tut nichts */
+static void test_stop_in_fault_does_nothing(void)
+{
+    step_active(ROF_FAULT_CHAMBER_MISSING);
+
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, rof_fsm_stop(&fsm));
+    TEST_ASSERT_EQUAL(ROF_STATE_FAULT, rof_fsm_state(&fsm));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -330,6 +414,14 @@ int main(void)
     RUN_TEST(test_u5_cooled_down_is_idle);
     RUN_TEST(test_u6_start_while_cooling_heats_again);
     RUN_TEST(test_stop_in_idle_does_nothing);
+
+    RUN_TEST(test_u7_fault_in_idle_blocks_start);
+    RUN_TEST(test_u7_fault_while_cooling);
+    RUN_TEST(test_u7_unlatched_fault_while_heating_stops_heating);
+    RUN_TEST(test_u7_unlatched_fault_while_holding_stops_heating);
+    RUN_TEST(test_fault_stays_while_cause_is_active);
+    RUN_TEST(test_u8_fault_clears_to_idle);
+    RUN_TEST(test_stop_in_fault_does_nothing);
 
     return UNITY_END();
 }
