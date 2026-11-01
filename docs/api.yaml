@@ -1,6 +1,628 @@
-# Einzige Quelle für die Schnittstelle (API-01). Inhalt folgt in M6.
+# Einzige Quelle für die Schnittstelle (API-01). Aus dieser Datei werden in
+# M9 die TypeScript-Typen der Oberfläche erzeugt. Kodierung und Prüfung auf
+# dem ESP32 liegen in proto/ (API-04). CI prüft diese Datei mit Redocly.
 openapi: 3.1.0
 info:
   title: Räucherofensteuerung API
-  version: 0.0.0
-paths: {}
+  version: 1.0.0
+  summary: Steuerung eines Räucherofens auf dem ESP32-S3
+  description: |
+    Der ESP32 spannt einen eigenen Access Point auf; die API ist nur dort
+    erreichbar (NET-01). Es gibt keine Anmeldung: Schutz bietet das
+    WPA2-Passwort des Access Points.
+
+    **Befehle** (POST, PUT) gehen als Befehl mit laufender Nummer über eine
+    Queue an den Regeltask (ARC-05). Der Webserver prüft die Anfrage vorher
+    mit `proto` und wartet höchstens 2 Sekunden im Snapshot auf das
+    Ergebnis seiner Nummer (E-026). Der Regeltask prüft jeden Befehl noch
+    einmal selbst (ARC-06).
+
+    **Zustand** kommt aus der Kopie des Snapshots (ARC-07): einmalig über
+    `GET /api/state` oder jede Sekunde über den WebSocket `/ws` (API-03).
+
+    **Sensor-IDs** sind Texte aus 16 Hex-Ziffern, keine Zahlen, weil
+    JavaScript ganze Zahlen nur bis 2^53 genau darstellt.
+  license:
+    name: Alle Rechte vorbehalten
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: http://192.168.4.1
+    description: Access Point des Räucherofens
+security: []
+tags:
+  - name: Zustand
+    description: Zustand und Grenzen lesen
+  - name: Befehle
+    description: Befehle an den Regeltask
+  - name: Sensoren
+    description: Rollen und Kalibrieroffsets der Sensoren
+
+paths:
+  /api/state:
+    get:
+      tags: [Zustand]
+      operationId: getState
+      summary: Aktueller Zustand
+      description: Die Kopie des Snapshots aus dem letzten Regelzyklus.
+      responses:
+        '200':
+          description: Zustand
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StateSnapshot'
+              examples:
+                holding:
+                  summary: Halten bei 80 °C, Generatorfühler fehlt
+                  externalValue: ./api-examples/state.json
+        '503':
+          $ref: '#/components/responses/NotReady'
+
+  /api/config:
+    get:
+      tags: [Zustand]
+      operationId: getConfig
+      summary: Grenzen für Eingaben
+      description: Damit die Oberfläche Eingaben vorab prüfen kann (WEB-06).
+      responses:
+        '200':
+          description: Grenzen
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Limits'
+              example:
+                setpoint_min_c: 20.00
+                setpoint_max_c: 110.00
+                offset_max_c: 5.00
+                hard_max_c: 120.00
+        '503':
+          $ref: '#/components/responses/NotReady'
+
+  /api/setpoint:
+    post:
+      tags: [Befehle]
+      operationId: setSetpoint
+      summary: Sollwert setzen
+      description: |
+        Außerhalb der Grenzen wird der Sollwert abgelehnt, nicht begrenzt,
+        und der Grund gemeldet (SAF-09).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetpointRequest'
+            example:
+              setpoint_c: 80
+      responses:
+        '200':
+          $ref: '#/components/responses/CommandAccepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/CommandConflict'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '422':
+          $ref: '#/components/responses/CommandInvalid'
+        '503':
+          $ref: '#/components/responses/Busy'
+        '504':
+          $ref: '#/components/responses/Timeout'
+
+  /api/start:
+    post:
+      tags: [Befehle]
+      operationId: start
+      summary: Heizen starten
+      description: Aus BEREIT oder ABKUEHLEN nach AUFHEIZEN. Ohne gesetzten Sollwert abgelehnt (E-022).
+      requestBody:
+        $ref: '#/components/requestBodies/Empty'
+      responses:
+        '200':
+          $ref: '#/components/responses/CommandAccepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/CommandConflict'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '503':
+          $ref: '#/components/responses/Busy'
+        '504':
+          $ref: '#/components/responses/Timeout'
+
+  /api/stop:
+    post:
+      tags: [Befehle]
+      operationId: stop
+      summary: Heizen stoppen
+      description: Aus AUFHEIZEN oder HALTEN nach ABKUEHLEN. In allen anderen Zuständen ohne Wirkung, aber erfolgreich.
+      requestBody:
+        $ref: '#/components/requestBodies/Empty'
+      responses:
+        '200':
+          $ref: '#/components/responses/CommandAccepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '503':
+          $ref: '#/components/responses/Busy'
+        '504':
+          $ref: '#/components/responses/Timeout'
+
+  /api/reset:
+    post:
+      tags: [Befehle]
+      operationId: reset
+      summary: Sicheren Zustand zurücksetzen
+      description: Nur in SICHERER_ZUSTAND und nur, wenn die Ursache weg ist (SAF-02). Danach BEREIT, nie direkt Heizen.
+      requestBody:
+        $ref: '#/components/requestBodies/Empty'
+      responses:
+        '200':
+          $ref: '#/components/responses/CommandAccepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/CommandConflict'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '503':
+          $ref: '#/components/responses/Busy'
+        '504':
+          $ref: '#/components/responses/Timeout'
+
+  /api/sensors/{id}/role:
+    put:
+      tags: [Sensoren]
+      operationId: assignRole
+      summary: Rolle zuweisen
+      description: |
+        Eine vergebene Rolle wird verschoben (E-014). `unassigned` löst die
+        Rolle. Während AUFHEIZEN und HALTEN gesperrt (E-022).
+      parameters:
+        - $ref: '#/components/parameters/SensorIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleRequest'
+            example:
+              role: chamber
+      responses:
+        '200':
+          $ref: '#/components/responses/CommandAccepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/CommandConflict'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '422':
+          $ref: '#/components/responses/CommandInvalid'
+        '500':
+          $ref: '#/components/responses/StorageError'
+        '503':
+          $ref: '#/components/responses/Busy'
+        '504':
+          $ref: '#/components/responses/Timeout'
+
+  /api/sensors/{id}/offset:
+    put:
+      tags: [Sensoren]
+      operationId: setOffset
+      summary: Kalibrieroffset setzen
+      description: Erlaubt von −offset_max_c bis +offset_max_c (E-014). Während AUFHEIZEN und HALTEN gesperrt (E-026).
+      parameters:
+        - $ref: '#/components/parameters/SensorIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OffsetRequest'
+            example:
+              offset_c: -0.5
+      responses:
+        '200':
+          $ref: '#/components/responses/CommandAccepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/CommandConflict'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '422':
+          $ref: '#/components/responses/CommandInvalid'
+        '500':
+          $ref: '#/components/responses/StorageError'
+        '503':
+          $ref: '#/components/responses/Busy'
+        '504':
+          $ref: '#/components/responses/Timeout'
+
+  /ws:
+    get:
+      tags: [Zustand]
+      operationId: liveState
+      summary: Livewerte über WebSocket
+      description: |
+        Nach dem Wechsel auf das WebSocket-Protokoll sendet der Server jede
+        Sekunde eine Textnachricht mit demselben JSON wie `GET /api/state`
+        (API-03). Nachrichten vom Client werden ignoriert. Bricht die
+        Verbindung ab, verbindet sich die Oberfläche neu (WEB-03).
+      responses:
+        '101':
+          description: |
+            Wechsel auf WebSocket. Danach jede Sekunde ein `StateSnapshot`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StateSnapshot'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+components:
+  parameters:
+    SensorIdPath:
+      name: id
+      in: path
+      required: true
+      description: ID des Sensors, beim DS18B20 die ROM-Adresse
+      schema:
+        $ref: '#/components/schemas/SensorId'
+
+  requestBodies:
+    Empty:
+      description: Kein Inhalt oder ein leeres Objekt
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            maxProperties: 0
+            additionalProperties: false
+
+  responses:
+    CommandAccepted:
+      description: Befehl angenommen
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CommandResponse'
+          example:
+            seq: 12
+            result: ok
+    CommandConflict:
+      description: Befehl passt nicht zum aktuellen Zustand, z. B. Start ohne Sollwert
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CommandResponse'
+          example:
+            seq: 13
+            result: no_setpoint
+    CommandInvalid:
+      description: |
+        Wert außerhalb der Grenzen oder unbekannter Sensor. Prüft schon
+        proto, fehlt `seq`, denn der Befehl wurde nie gesendet.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CommandResponse'
+          example:
+            result: setpoint_too_high
+    StorageError:
+      description: Speichern fehlgeschlagen, nichts wurde geändert
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CommandResponse'
+          example:
+            seq: 14
+            result: storage_error
+    BadRequest:
+      description: Anfrage kaputt oder unvollständig, nichts wurde gesendet
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RequestError'
+          example:
+            error: unknown_field
+            field: foo
+    TooLarge:
+      description: Anfrage größer als 256 Byte
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RequestError'
+          example:
+            error: too_large
+    Busy:
+      description: Befehlsqueue voll, später erneut versuchen (ARC-09)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RequestError'
+          example:
+            error: busy
+    Timeout:
+      description: Kein Ergebnis nach 2 Sekunden; der Befehl kann trotzdem noch wirken
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RequestError'
+          example:
+            error: timeout
+            seq: 15
+    NotReady:
+      description: Noch kein Snapshot vorhanden, kurz nach dem Start
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RequestError'
+          example:
+            error: not_ready
+
+  schemas:
+    SensorId:
+      type: string
+      pattern: '^[0-9A-F]{16}$'
+      description: 64-Bit-ID als 16 Hex-Ziffern in Großbuchstaben
+      examples: ['28AA000000000001']
+
+    Temperature:
+      description: Temperatur in °C, null wenn kein gültiger Wert vorliegt
+      type: [number, 'null']
+
+    State:
+      type: string
+      description: |
+        Zustand des Automaten. Deutsch: idle BEREIT, heating AUFHEIZEN,
+        holding HALTEN, cooling ABKUEHLEN, fault FEHLER, safe_state
+        SICHERER_ZUSTAND (docs/zustandsautomat.md).
+      enum: [idle, heating, holding, cooling, fault, safe_state]
+
+    Role:
+      type: string
+      description: |
+        Rolle eines Sensors. Deutsch: chamber GARRAUM, probe_1 KERN_1,
+        probe_2 KERN_2, smoke_gen GENERATOR, unassigned NICHT_ZUGEORDNET.
+      enum: [unassigned, chamber, probe_1, probe_2, smoke_gen]
+
+    RoleStatus:
+      type: string
+      description: Zustand einer Rolle (SEN-05)
+      enum: [ok, unassigned, missing, read_error, duplicate]
+
+    Fault:
+      type: string
+      description: Ursache der Sicherheitslogik (SAF-03 bis SAF-08)
+      enum:
+        - none
+        - chamber_unassigned
+        - chamber_missing
+        - chamber_read_error
+        - chamber_duplicate
+        - implausible
+        - over_temperature
+        - frozen
+        - cycle_overrun
+
+    ReadStatus:
+      type: string
+      description: Ergebnis des letzten Lesens eines Kanals
+      enum: [ok, not_found, read_error]
+
+    CommandType:
+      type: string
+      enum: [set_setpoint, start, stop, assign_role, set_offset, reset]
+
+    CommandResult:
+      type: string
+      description: Ergebnis eines Befehls, Gründe der Ablehnung siehe docs/zustandsautomat.md
+      enum:
+        - ok
+        - no_setpoint
+        - already_running
+        - fault_active
+        - safe_state
+        - setpoint_too_low
+        - setpoint_too_high
+        - setpoint_not_a_number
+        - sensors_locked
+        - unknown_sensor
+        - invalid_value
+        - storage_error
+        - not_in_safe_state
+        - cause_active
+        - unknown_command
+
+    Limits:
+      type: object
+      additionalProperties: false
+      required: [setpoint_min_c, setpoint_max_c, offset_max_c, hard_max_c]
+      properties:
+        setpoint_min_c:
+          type: number
+        setpoint_max_c:
+          type: number
+        offset_max_c:
+          type: number
+          description: Offset erlaubt von −offset_max_c bis +offset_max_c
+        hard_max_c:
+          type: number
+          description: Harte Grenze der Sicherheitslogik, nicht über die API änderbar (SAF-06)
+
+    RoleReading:
+      type: object
+      additionalProperties: false
+      required: [status, temp_c]
+      properties:
+        status:
+          $ref: '#/components/schemas/RoleStatus'
+        temp_c:
+          $ref: '#/components/schemas/Temperature'
+
+    Channel:
+      type: object
+      additionalProperties: false
+      required: [id, type, role, offset_c, present, duplicate, read_status, temp_c]
+      properties:
+        id:
+          $ref: '#/components/schemas/SensorId'
+        type:
+          type: string
+          description: Sensortyp, vom Treiber gemeldet; leer bis zur ersten Meldung nach dem Start
+          examples: [DS18B20]
+        role:
+          $ref: '#/components/schemas/Role'
+        offset_c:
+          type: number
+        present:
+          type: boolean
+        duplicate:
+          type: boolean
+        read_status:
+          $ref: '#/components/schemas/ReadStatus'
+        temp_c:
+          $ref: '#/components/schemas/Temperature'
+
+    CommandRecord:
+      type: object
+      additionalProperties: false
+      required: [seq, command, result]
+      properties:
+        seq:
+          type: integer
+          minimum: 0
+        command:
+          $ref: '#/components/schemas/CommandType'
+        result:
+          $ref: '#/components/schemas/CommandResult'
+
+    StateSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        - time_ms
+        - state
+        - setpoint_c
+        - duty
+        - latched_fault
+        - active_fault
+        - roles
+        - channels
+        - sensor_overflow
+        - recent_commands
+      properties:
+        time_ms:
+          type: integer
+          minimum: 0
+          description: Millisekunden seit dem Start, Zeitpunkt des letzten Regelzyklus
+        state:
+          $ref: '#/components/schemas/State'
+        setpoint_c:
+          $ref: '#/components/schemas/Temperature'
+        duty:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Tastgrad am Ausgang
+        latched_fault:
+          $ref: '#/components/schemas/Fault'
+        active_fault:
+          $ref: '#/components/schemas/Fault'
+        roles:
+          type: object
+          additionalProperties: false
+          required: [chamber, probe_1, probe_2, smoke_gen]
+          properties:
+            chamber:
+              $ref: '#/components/schemas/RoleReading'
+            probe_1:
+              $ref: '#/components/schemas/RoleReading'
+            probe_2:
+              $ref: '#/components/schemas/RoleReading'
+            smoke_gen:
+              $ref: '#/components/schemas/RoleReading'
+        channels:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/Channel'
+        sensor_overflow:
+          type: boolean
+          description: Mehr Sensoren als Kanäle (SEN-07)
+        recent_commands:
+          type: array
+          maxItems: 8
+          description: Ergebnisse der letzten Befehle, neuestes zuerst (E-026)
+          items:
+            $ref: '#/components/schemas/CommandRecord'
+
+    SetpointRequest:
+      type: object
+      additionalProperties: false
+      required: [setpoint_c]
+      properties:
+        setpoint_c:
+          type: number
+
+    RoleRequest:
+      type: object
+      additionalProperties: false
+      required: [role]
+      properties:
+        role:
+          $ref: '#/components/schemas/Role'
+
+    OffsetRequest:
+      type: object
+      additionalProperties: false
+      required: [offset_c]
+      properties:
+        offset_c:
+          type: number
+
+    CommandResponse:
+      type: object
+      additionalProperties: false
+      required: [result]
+      properties:
+        seq:
+          type: integer
+          minimum: 0
+          description: Nummer des Befehls; fehlt, wenn proto schon abgelehnt hat
+        result:
+          $ref: '#/components/schemas/CommandResult'
+
+    RequestError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum:
+            - bad_json
+            - missing_field
+            - wrong_type
+            - unknown_field
+            - unknown_value
+            - bad_sensor_id
+            - too_large
+            - busy
+            - timeout
+            - not_ready
+        field:
+          type: string
+          description: betroffenes Feld, wenn bekannt
+        seq:
+          type: integer
+          minimum: 0
+          description: nur bei timeout
