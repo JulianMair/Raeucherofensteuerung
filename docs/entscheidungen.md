@@ -178,3 +178,13 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
 - **Verworfen:**
   - In CI und lokal dieselbe cppcheck-Version erzwingen: Ubuntu liefert 2.13, Homebrew die aktuelle Version. Eine eigene Version in CI zu bauen kostet bei jedem Lauf Minuten.
   - Die Funde als Datei-Artefakt hochladen: Artefakte gibt GitHub ebenfalls nur angemeldet heraus.
+
+## E-020 FEHLER als Startsperre, Verriegeln nur beim Heizen (M4)
+
+- **Kontext:** CLAUDE.md nennt die Zustände `FEHLER` und `SICHERER_ZUSTAND`, legt aber nicht fest, wie sie sich unterscheiden. Bisher (E-018) verriegelte die Sicherheitslogik bei jedem Fehler, auch im Leerlauf. Ein fehlender Garraumsensor beim Einschalten führte damit sofort in den sicheren Zustand, obwohl der Ausgang ohnehin aus war, und verlangte jedes Mal einen Reset.
+- **Entscheidung:** Vom Nutzer gewählt:
+  - Die Sicherheitslogik prüft weiter in jedem Zyklus alle Regeln (SAF-01). Sie verriegelt aber nur, wenn der Ausgang aktiv sein darf (AUFHEIZEN, HALTEN; im Eingabe-Struct `heating`) oder bei Übertemperatur. Übertemperatur verriegelt immer, weil sie auch bei Ausgang 0 entstehen kann, etwa durch ein klemmendes Relais.
+  - Ohne Heizen bleibt jede andere Ursache nur aktiv (`rof_safety_active()`). Der Zustandsautomat geht dann in `FEHLER`: Ausgang 0, Start gesperrt. Ist die Ursache weg, geht er von selbst zurück nach `BEREIT`, ohne Reset.
+  - `rof_safety_limit_duty()` liefert 0 bei Verriegelung und auch bei einer nur aktiven Ursache. „Bei einem Fehler ist der Ausgang 0“ gilt damit in jedem Zustand.
+- **Abweichung vom Wortlaut:** CLAUDE.md verlangt, dass bei einem Fehler `SICHERER_ZUSTAND` gesetzt bleibt. Ohne Heizen ist es jetzt `FEHLER`. Der Ausgang ist in beiden Fällen 0; der Unterschied betrifft nur, ob ein Reset nötig ist.
+- **Verworfen:** In jedem Zustand verriegeln und `FEHLER` für nicht sicherheitsrelevante Fehler verwenden, etwa einen ausgefallenen Kernfühler. Das entspricht dem Wortlaut, verlangt aber nach jedem Einschalten ohne Garraumsensor einen Reset und gibt `FEHLER` eine Bedeutung, die CLAUDE.md nicht fordert.

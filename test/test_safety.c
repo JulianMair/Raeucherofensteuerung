@@ -152,13 +152,22 @@ static rof_safety_input_t chamber_ok(float temp_c, float duty)
         .chamber_status = ROF_ROLE_STATUS_OK,
         .chamber_temp_c = temp_c,
         .applied_duty = duty,
+        .heating = true,
     };
 }
 
 /* Eingabe mit Garraumstatus, aber ohne gültigen Wert */
 static rof_safety_input_t chamber_with(rof_role_status_t status)
 {
-    return (rof_safety_input_t){ .chamber_status = status, .chamber_temp_c = 0.0f };
+    return (rof_safety_input_t){ .chamber_status = status, .chamber_temp_c = 0.0f, .heating = true };
+}
+
+/* Die beiden Hilfen oben beschreiben einen Zyklus beim Heizen (AUFHEIZEN,
+ * HALTEN). Ohne Heizen verriegelt nur die Übertemperatur (E-020). */
+static rof_safety_input_t not_heating(rof_safety_input_t in)
+{
+    in.heating = false;
+    return in;
 }
 
 /* SAF-02: nach init ist nichts verriegelt */
@@ -309,10 +318,10 @@ static void test_hard_limit_ignores_wider_config(void)
     TEST_ASSERT_EQUAL(ROF_FAULT_OVER_TEMPERATURE, evaluate_fresh(150.0f));
 }
 
-/* SAF-06: wirkt auch bei Ausgang 0, z. B. bei einem klemmenden Relais */
+/* SAF-06: verriegelt auch ohne Heizen, z. B. bei einem klemmenden Relais (E-020) */
 static void test_over_temperature_trips_with_output_off(void)
 {
-    rof_safety_input_t in = chamber_ok(121.0f, 0.0f);
+    rof_safety_input_t in = not_heating(chamber_ok(121.0f, 0.0f));
 
     TEST_ASSERT_EQUAL(ROF_FAULT_OVER_TEMPERATURE, rof_safety_evaluate(&safety, &in));
 }
@@ -529,6 +538,47 @@ static void test_safety_trips_again_after_reset(void)
     TEST_ASSERT_EQUAL_UINT(2, log_mock.count[ROF_LOG_ERROR]);
 }
 
+/* ---- Ohne Heizen: aktiv, aber nicht verriegelt (E-020) ------------------ */
+
+/* SAF-02, SAF-07: ohne Heizen ist ein Sensorfehler aktiv, verriegelt aber nicht.
+ * Der Ausgang ist trotzdem 0. */
+static void test_fault_without_heating_is_active_but_not_latched(void)
+{
+    rof_safety_input_t in = not_heating(chamber_with(ROF_ROLE_STATUS_MISSING));
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, rof_safety_evaluate(&safety, &in));
+    TEST_ASSERT_EQUAL(ROF_FAULT_CHAMBER_MISSING, rof_safety_active(&safety));
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, rof_safety_fault(&safety));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, rof_safety_limit_duty(&safety, 0.6f));
+    TEST_ASSERT_EQUAL_UINT(0, log_mock.count[ROF_LOG_ERROR]);
+}
+
+/* E-020: ohne Heizen verschwindet ein Fehler von selbst, wenn die Ursache weg ist */
+static void test_fault_without_heating_clears_when_cause_is_gone(void)
+{
+    rof_safety_input_t missing = not_heating(chamber_with(ROF_ROLE_STATUS_MISSING));
+    rof_safety_input_t ok = not_heating(chamber_ok(21.0f, 0.0f));
+    rof_safety_evaluate(&safety, &missing);
+
+    rof_safety_evaluate(&safety, &ok);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, rof_safety_active(&safety));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.6f, rof_safety_limit_duty(&safety, 0.6f));
+}
+
+/* E-020: rof_safety_active() meldet, was jetzt anliegt, unabhängig von der Verriegelung */
+static void test_active_shows_current_cause_while_latched(void)
+{
+    rof_safety_input_t missing = chamber_with(ROF_ROLE_STATUS_MISSING);
+    rof_safety_input_t ok = chamber_ok(60.0f, 0.0f);
+    rof_safety_evaluate(&safety, &missing);
+
+    rof_safety_evaluate(&safety, &ok);
+
+    TEST_ASSERT_EQUAL(ROF_FAULT_NONE, rof_safety_active(&safety));
+    TEST_ASSERT_EQUAL(ROF_FAULT_CHAMBER_MISSING, rof_safety_fault(&safety));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -579,6 +629,10 @@ int main(void)
     RUN_TEST(test_reset_without_trip_does_nothing);
     RUN_TEST(test_reset_restarts_the_freeze_timer);
     RUN_TEST(test_safety_trips_again_after_reset);
+
+    RUN_TEST(test_fault_without_heating_is_active_but_not_latched);
+    RUN_TEST(test_fault_without_heating_clears_when_cause_is_gone);
+    RUN_TEST(test_active_shows_current_cause_while_latched);
 
     return UNITY_END();
 }

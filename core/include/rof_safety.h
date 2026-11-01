@@ -56,13 +56,15 @@ typedef struct {
     rof_role_status_t chamber_status; /* aus rof_sensor_registry_role() */
     float chamber_temp_c;             /* nur bei ROF_ROLE_STATUS_OK gültig */
     float applied_duty;               /* Tastgrad, der seit dem letzten Zyklus anlag */
+    bool heating;                     /* AUFHEIZEN oder HALTEN: Der Ausgang darf aktiv sein */
 } rof_safety_input_t;
 
 typedef struct {
     rof_safety_config_t config;
     const rof_clock_t *clk;
     const rof_log_t *logger;
-    rof_fault_t fault; /* verriegelte Ursache, ROF_FAULT_NONE wenn nicht ausgelöst */
+    rof_fault_t fault;  /* verriegelte Ursache, ROF_FAULT_NONE wenn nicht ausgelöst */
+    rof_fault_t active; /* Ursache im letzten Zyklus, auch ohne Verriegelung (E-020) */
     /* SAF-05: Bezugswert, seit dem die Zeit ohne Änderung läuft */
     bool has_reference;
     float reference_c;
@@ -96,15 +98,21 @@ rof_setpoint_check_t rof_safety_check_setpoint(const rof_safety_t *safety, float
 
 /* Prüft alle Regeln für diesen Zyklus (SAF-01). Löst eine Regel aus und
  * ist noch nichts verriegelt, verriegelt das Modul mit dieser Ursache und
- * loggt sie. Liefert die verriegelte Ursache, ROF_FAULT_NONE wenn frei. */
+ * loggt sie, aber nur beim Heizen (input->heating) oder bei Übertemperatur.
+ * Ohne Heizen bleibt jede andere Ursache nur aktiv (E-020).
+ * Liefert die verriegelte Ursache, ROF_FAULT_NONE wenn frei. */
 rof_fault_t rof_safety_evaluate(rof_safety_t *safety, const rof_safety_input_t *input);
 
-/* Der Tastgrad, der tatsächlich an den Ausgang darf: 0, solange
- * verriegelt ist, sonst requested_duty (SAF-02). */
+/* Der Tastgrad, der tatsächlich an den Ausgang darf: 0, solange verriegelt
+ * ist oder eine Ursache aktiv ist, sonst requested_duty (SAF-02). */
 float rof_safety_limit_duty(const rof_safety_t *safety, float requested_duty);
 
 /* Die verriegelte Ursache, ROF_FAULT_NONE wenn nicht ausgelöst. */
 rof_fault_t rof_safety_fault(const rof_safety_t *safety);
+
+/* Die Ursache, die im letzten Zyklus anlag, auch ohne Verriegelung.
+ * ROF_FAULT_NONE, wenn keine Regel ausgelöst hat (E-020). */
+rof_fault_t rof_safety_active(const rof_safety_t *safety);
 
 /* Manueller Reset des sicheren Zustands (SAF-02). Prüft alle Regeln mit
  * der aktuellen Eingabe; die Zeit für eingefrorene Werte beginnt dabei neu.

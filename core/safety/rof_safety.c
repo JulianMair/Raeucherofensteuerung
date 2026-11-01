@@ -158,7 +158,12 @@ rof_fault_t rof_safety_evaluate(rof_safety_t *safety, const rof_safety_input_t *
     const rof_fault_t active = find_fault(safety, input, now_ms);
     safety->has_last_cycle = true;
     safety->last_cycle_ms = now_ms;
-    if (active != ROF_FAULT_NONE && safety->fault == ROF_FAULT_NONE) {
+    safety->active = active;
+    /* Verriegelt wird nur, wenn der Ausgang aktiv sein darf. Übertemperatur
+     * verriegelt immer, denn sie kann auch bei Ausgang 0 entstehen, etwa
+     * durch ein klemmendes Relais (E-020). */
+    const bool must_latch = input->heating || active == ROF_FAULT_OVER_TEMPERATURE;
+    if (active != ROF_FAULT_NONE && safety->fault == ROF_FAULT_NONE && must_latch) {
         safety->fault = active;
         rof_log_write(safety->logger, ROF_LOG_ERROR, FAULT_TEXT[active]);
     }
@@ -167,7 +172,7 @@ rof_fault_t rof_safety_evaluate(rof_safety_t *safety, const rof_safety_input_t *
 
 float rof_safety_limit_duty(const rof_safety_t *safety, float requested_duty)
 {
-    if (safety->fault != ROF_FAULT_NONE) {
+    if (safety->fault != ROF_FAULT_NONE || safety->active != ROF_FAULT_NONE) {
         return 0.0f;
     }
     return requested_duty;
@@ -176,6 +181,11 @@ float rof_safety_limit_duty(const rof_safety_t *safety, float requested_duty)
 rof_fault_t rof_safety_fault(const rof_safety_t *safety)
 {
     return safety->fault;
+}
+
+rof_fault_t rof_safety_active(const rof_safety_t *safety)
+{
+    return safety->active;
 }
 
 rof_fault_t rof_safety_reset(rof_safety_t *safety, const rof_safety_input_t *input)
@@ -187,6 +197,7 @@ rof_fault_t rof_safety_reset(rof_safety_t *safety, const rof_safety_input_t *inp
      * würde der alte, eingefrorene Bezug sofort wieder auslösen. */
     safety->has_reference = false;
     const rof_fault_t active = find_fault(safety, input, rof_clock_now_ms(safety->clk));
+    safety->active = active;
     if (active != ROF_FAULT_NONE) {
         rof_log_write(safety->logger, ROF_LOG_WARN, "Reset abgelehnt: Ursache besteht noch");
         return active;
