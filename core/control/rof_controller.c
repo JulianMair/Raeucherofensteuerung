@@ -45,6 +45,101 @@ static void apply_duty(rof_controller_t *ctrl, float duty)
     ctrl->applied_duty = duty;
 }
 
+/* ---- Befehle (ARC-05, ARC-06) ------------------------------------------- */
+
+static void record_result(rof_controller_t *ctrl, const rof_command_t *command,
+                          rof_cmd_result_t result)
+{
+    ctrl->recent[ctrl->recent_next] = (rof_command_record_t){
+        .seq = command->seq,
+        .type = command->type,
+        .result = result,
+    };
+    ctrl->recent_next = (ctrl->recent_next + 1) % ROF_CONTROLLER_RECENT_RESULTS;
+    if (ctrl->recent_count < ROF_CONTROLLER_RECENT_RESULTS) {
+        ctrl->recent_count++;
+    }
+    if (result != ROF_CMD_OK) {
+        rof_log_write(ctrl->io.logger, ROF_LOG_WARN, "Befehl abgelehnt");
+    }
+}
+
+/* Antwort der Sensorverwaltung als Befehlsergebnis */
+static rof_cmd_result_t from_registry(rof_status_t status)
+{
+    switch (status) {
+    case ROF_OK:
+        return ROF_CMD_OK;
+    case ROF_ERR_NOT_FOUND:
+        return ROF_CMD_UNKNOWN_SENSOR;
+    case ROF_ERR_INVALID_ARG:
+        return ROF_CMD_INVALID_VALUE;
+    default:
+        return ROF_CMD_STORAGE_ERROR;
+    }
+}
+
+/* SAF-02: Reset nur im sicheren Zustand und nur ohne bestehende Ursache.
+ * Geprüft wird mit dem Garraumwert aus dem letzten Zyklus. Gelingt er, sieht
+ * der Automat noch im selben Zyklus "nicht mehr verriegelt" (Ü10). */
+static rof_cmd_result_t reset_safe_state(rof_controller_t *ctrl)
+{
+    if (rof_fsm_state(&ctrl->fsm) != ROF_STATE_SAFE_STATE) {
+        return ROF_CMD_NOT_IN_SAFE_STATE;
+    }
+    float chamber_c = 0.0f;
+    const rof_safety_input_t input = {
+        .chamber_status = rof_sensor_registry_role(&ctrl->registry, ROF_ROLE_CHAMBER, &chamber_c),
+        .chamber_temp_c = chamber_c,
+        .applied_duty = ctrl->applied_duty,
+        .heating = false,
+    };
+    if (rof_safety_reset(&ctrl->safety, &input) != ROF_FAULT_NONE) {
+        return ROF_CMD_CAUSE_ACTIVE;
+    }
+    return ROF_CMD_OK;
+}
+
+/* ARC-06: Der Regeltask prüft jeden Befehl selbst. Unbekanntes wird verworfen. */
+static rof_cmd_result_t dispatch(rof_controller_t *ctrl, const rof_command_t *command)
+{
+    switch (command->type) {
+    case ROF_COMMAND_SET_SETPOINT:
+        return rof_fsm_set_setpoint(&ctrl->fsm, &ctrl->safety, command->value_c);
+    case ROF_COMMAND_START:
+        return rof_fsm_start(&ctrl->fsm);
+    case ROF_COMMAND_STOP:
+        return rof_fsm_stop(&ctrl->fsm);
+    case ROF_COMMAND_ASSIGN_ROLE:
+        if (!rof_fsm_roles_editable(&ctrl->fsm)) {
+            return ROF_CMD_SENSORS_LOCKED; /* E-022 */
+        }
+        return from_registry(rof_sensor_registry_assign(&ctrl->registry, command->sensor_id, command->role));
+    case ROF_COMMAND_SET_OFFSET:
+        if (!rof_fsm_roles_editable(&ctrl->fsm)) {
+            return ROF_CMD_SENSORS_LOCKED; /* E-026: ein Offset verschiebt den Messwert wie ein Fühlerwechsel */
+        }
+        return from_registry(rof_sensor_registry_set_offset(&ctrl->registry, command->sensor_id, command->value_c));
+    case ROF_COMMAND_RESET:
+        return reset_safe_state(ctrl);
+    default:
+        return ROF_CMD_UNKNOWN_COMMAND;
+    }
+}
+
+/* Schritt 1: höchstens max_commands_per_cycle Befehle, der Rest wartet auf
+ * den nächsten Zyklus. Eine geflutete Queue verzögert so nie die Regelung (ARC-09). */
+static void process_commands(rof_controller_t *ctrl)
+{
+    for (unsigned i = 0; i < ctrl->config.max_commands_per_cycle; i++) {
+        rof_command_t command;
+        if (!rof_command_source_receive(ctrl->io.commands, &command)) {
+            return;
+        }
+        record_result(ctrl, &command, dispatch(ctrl, &command));
+    }
+}
+
 /* ---- Öffentliche Funktionen --------------------------------------------- */
 
 rof_controller_config_t rof_controller_default_config(void)
@@ -83,6 +178,8 @@ rof_status_t rof_controller_init(rof_controller_t *ctrl, const rof_controller_co
     }
     ctrl->was_heating = false;
     ctrl->has_last_cycle = false;
+    ctrl->recent_count = 0;
+    ctrl->recent_next = 0;
     /* SAF-10: nach jedem Start ausdrücklich aus, egal was vorher war */
     apply_duty(ctrl, 0.0f);
     return ROF_OK;
@@ -92,6 +189,9 @@ void rof_controller_cycle(rof_controller_t *ctrl)
 {
     const uint64_t now_ms = rof_clock_now_ms(ctrl->io.clk);
     const float dt_s = seconds_since_last_cycle(ctrl, now_ms);
+
+    /* 1. Befehle */
+    process_commands(ctrl);
 
     /* 2. Sensoren lesen */
     rof_sensor_registry_update(&ctrl->registry);

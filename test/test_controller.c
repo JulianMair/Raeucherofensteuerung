@@ -314,6 +314,253 @@ static void test_restart_while_holding_starts_idle_with_output_off(void)
     TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_OK, rof_sensor_registry_role(&ctrl.registry, ROF_ROLE_CHAMBER, &chamber_c));
 }
 
+/* ---- Befehle (ARC-05, ARC-06, ARC-09) ----------------------------------- */
+
+static void send(rof_command_t command)
+{
+    TEST_ASSERT_TRUE(mock_command_queue_push(&queue_mock, command));
+}
+
+static void send_simple(uint32_t seq, rof_command_type_t type)
+{
+    send((rof_command_t){ .seq = seq, .type = type });
+}
+
+static void send_setpoint(uint32_t seq, float setpoint_c)
+{
+    send((rof_command_t){ .seq = seq, .type = ROF_COMMAND_SET_SETPOINT, .value_c = setpoint_c });
+}
+
+static void send_assign(uint32_t seq, rof_sensor_id_t id, rof_role_t role)
+{
+    send((rof_command_t){ .seq = seq, .type = ROF_COMMAND_ASSIGN_ROLE, .sensor_id = id, .role = role });
+}
+
+static void send_offset(uint32_t seq, rof_sensor_id_t id, float offset_c)
+{
+    send((rof_command_t){ .seq = seq, .type = ROF_COMMAND_SET_OFFSET, .sensor_id = id, .value_c = offset_c });
+}
+
+/* Ergebnis des Befehls mit dieser Nummer. Scheitert, wenn es nicht vorliegt. */
+static rof_cmd_result_t result_of(uint32_t seq)
+{
+    for (size_t i = 0; i < ctrl.recent_count; i++) {
+        if (ctrl.recent[i].seq == seq) {
+            return ctrl.recent[i].result;
+        }
+    }
+    TEST_FAIL_MESSAGE("kein Ergebnis zu dieser Nummer");
+    return ROF_CMD_OK;
+}
+
+static bool has_result(uint32_t seq)
+{
+    for (size_t i = 0; i < ctrl.recent_count; i++) {
+        if (ctrl.recent[i].seq == seq) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* ARC-05: Befehle kommen über die Befehlsquelle und wirken im selben Zyklus */
+static void test_commands_take_effect_in_the_cycle(void)
+{
+    assign_chamber();
+    set_chamber(75.0f);
+    send_setpoint(1, 80.0f);
+    send_simple(2, ROF_COMMAND_START);
+
+    cycle();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, result_of(1));
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, result_of(2));
+    TEST_ASSERT_EQUAL(ROF_STATE_HEATING, rof_fsm_state(&ctrl.fsm));
+    TEST_ASSERT_TRUE(heater_mock.duty > 0.0f);
+}
+
+/* ARC-09: höchstens 4 Befehle je Zyklus, der Rest wartet */
+static void test_at_most_four_commands_per_cycle(void)
+{
+    for (uint32_t seq = 1; seq <= 10; seq++) {
+        send_setpoint(seq, 80.0f);
+    }
+
+    cycle();
+    TEST_ASSERT_EQUAL_UINT(4, queue_mock.received);
+    cycle();
+    TEST_ASSERT_EQUAL_UINT(8, queue_mock.received);
+    cycle();
+    TEST_ASSERT_EQUAL_UINT(10, queue_mock.received);
+}
+
+/* SAF-09, ARC-06: ungültiger Sollwert abgelehnt mit Grund und gewarnt */
+static void test_invalid_setpoint_is_rejected_with_reason(void)
+{
+    const unsigned warnings_before = log_mock.count[ROF_LOG_WARN];
+    send_setpoint(1, 200.0f);
+
+    cycle();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_SETPOINT_TOO_HIGH, result_of(1));
+    TEST_ASSERT_EQUAL_UINT(warnings_before + 1, log_mock.count[ROF_LOG_WARN]);
+}
+
+/* E-022 über einen Befehl: Start ohne Sollwert */
+static void test_start_without_setpoint_is_rejected(void)
+{
+    assign_chamber();
+    send_simple(1, ROF_COMMAND_START);
+
+    cycle();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_NO_SETPOINT, result_of(1));
+    TEST_ASSERT_EQUAL(ROF_STATE_IDLE, rof_fsm_state(&ctrl.fsm));
+}
+
+/* ARC-06: unbekannte Befehle werden verworfen, auch ein mit 0 gefüllter */
+static void test_unknown_command_type_is_rejected(void)
+{
+    send_simple(1, (rof_command_type_t)0);
+    send_simple(2, (rof_command_type_t)99);
+
+    cycle();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_UNKNOWN_COMMAND, result_of(1));
+    TEST_ASSERT_EQUAL(ROF_CMD_UNKNOWN_COMMAND, result_of(2));
+}
+
+/* SEN-02 über einen Befehl */
+static void test_assign_role_via_command(void)
+{
+    cycle();
+    send_assign(1, PROBE_ID, ROF_ROLE_PROBE_1);
+
+    cycle();
+
+    float probe_c = 0.0f;
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, result_of(1));
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_OK, rof_sensor_registry_role(&ctrl.registry, ROF_ROLE_PROBE_1, &probe_c));
+}
+
+static void test_assign_with_unknown_sensor_or_role_is_rejected(void)
+{
+    cycle();
+    send_assign(1, 0x1234, ROF_ROLE_PROBE_1);
+    send_assign(2, PROBE_ID, (rof_role_t)99);
+
+    cycle();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_UNKNOWN_SENSOR, result_of(1));
+    TEST_ASSERT_EQUAL(ROF_CMD_INVALID_VALUE, result_of(2));
+}
+
+/* SEN-01 über einen Befehl: Offset setzen, außerhalb ±5 °C abgelehnt */
+static void test_set_offset_via_command(void)
+{
+    cycle();
+    send_offset(1, PROBE_ID, 1.5f);
+    send_offset(2, PROBE_ID, 6.0f);
+
+    cycle();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, result_of(1));
+    TEST_ASSERT_EQUAL(ROF_CMD_INVALID_VALUE, result_of(2));
+}
+
+/* E-022: Rollen und Offsets sind beim Heizen gesperrt */
+static void test_sensor_settings_are_locked_while_heating(void)
+{
+    assign_chamber();
+    set_chamber(75.0f);
+    start_heating(80.0f);
+    cycle();
+    send_assign(1, PROBE_ID, ROF_ROLE_PROBE_1);
+    send_offset(2, CHAMBER_ID, 1.0f);
+
+    cycle();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_SENSORS_LOCKED, result_of(1));
+    TEST_ASSERT_EQUAL(ROF_CMD_SENSORS_LOCKED, result_of(2));
+}
+
+/* SEN-04: lässt sich nicht speichern, wird das gemeldet und nichts geändert */
+static void test_storage_error_is_reported(void)
+{
+    cycle();
+    mock_storage_set_save_status(&flash_mock, ROF_ERR_IO);
+    send_assign(1, PROBE_ID, ROF_ROLE_PROBE_1);
+
+    cycle();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_STORAGE_ERROR, result_of(1));
+}
+
+/* SAF-02: Reset nur im sicheren Zustand */
+static void test_reset_outside_safe_state_is_rejected(void)
+{
+    assign_chamber();
+    send_simple(1, ROF_COMMAND_RESET);
+
+    cycle();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_NOT_IN_SAFE_STATE, result_of(1));
+}
+
+/* SAF-02: Reset abgelehnt, solange die Ursache besteht */
+static void test_reset_with_cause_active_is_rejected(void)
+{
+    assign_chamber();
+    set_chamber(75.0f);
+    start_heating(80.0f);
+    cycle();
+    mock_temp_sensor_unplug(&bus_mock, CHAMBER_ID);
+    cycle();
+    send_simple(1, ROF_COMMAND_RESET);
+
+    cycle();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_CAUSE_ACTIVE, result_of(1));
+    TEST_ASSERT_EQUAL(ROF_STATE_SAFE_STATE, rof_fsm_state(&ctrl.fsm));
+}
+
+/* SAF-02, Ü10: Reset bei behobener Ursache führt nach BEREIT, nicht ins Heizen */
+static void test_reset_after_cause_is_gone_returns_to_idle(void)
+{
+    assign_chamber();
+    set_chamber(75.0f);
+    start_heating(80.0f);
+    cycle();
+    mock_temp_sensor_unplug(&bus_mock, CHAMBER_ID);
+    cycle();
+    mock_temp_sensor_plug(&bus_mock, CHAMBER_ID, "DS18B20", 75.0f);
+    cycle(); /* Sensor wieder da, aber noch verriegelt */
+    TEST_ASSERT_EQUAL(ROF_STATE_SAFE_STATE, rof_fsm_state(&ctrl.fsm));
+    send_simple(1, ROF_COMMAND_RESET);
+
+    cycle();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, result_of(1));
+    TEST_ASSERT_EQUAL(ROF_STATE_IDLE, rof_fsm_state(&ctrl.fsm));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, heater_mock.duty);
+}
+
+/* E-026: die letzten 8 Ergebnisse bleiben abrufbar, ältere fallen heraus */
+static void test_last_eight_results_are_kept(void)
+{
+    for (uint32_t seq = 1; seq <= 12; seq++) {
+        send_setpoint(seq, 80.0f);
+    }
+
+    cycle();
+    cycle();
+    cycle();
+
+    TEST_ASSERT_FALSE(has_result(4));
+    TEST_ASSERT_TRUE(has_result(5));
+    TEST_ASSERT_TRUE(has_result(12));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -332,6 +579,21 @@ int main(void)
     RUN_TEST(test_pi_restarts_when_heating_starts_again);
     RUN_TEST(test_output_failure_is_logged);
     RUN_TEST(test_restart_while_holding_starts_idle_with_output_off);
+
+    RUN_TEST(test_commands_take_effect_in_the_cycle);
+    RUN_TEST(test_at_most_four_commands_per_cycle);
+    RUN_TEST(test_invalid_setpoint_is_rejected_with_reason);
+    RUN_TEST(test_start_without_setpoint_is_rejected);
+    RUN_TEST(test_unknown_command_type_is_rejected);
+    RUN_TEST(test_assign_role_via_command);
+    RUN_TEST(test_assign_with_unknown_sensor_or_role_is_rejected);
+    RUN_TEST(test_set_offset_via_command);
+    RUN_TEST(test_sensor_settings_are_locked_while_heating);
+    RUN_TEST(test_storage_error_is_reported);
+    RUN_TEST(test_reset_outside_safe_state_is_rejected);
+    RUN_TEST(test_reset_with_cause_active_is_rejected);
+    RUN_TEST(test_reset_after_cause_is_gone_returns_to_idle);
+    RUN_TEST(test_last_eight_results_are_kept);
 
     return UNITY_END();
 }

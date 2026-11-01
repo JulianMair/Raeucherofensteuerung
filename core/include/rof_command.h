@@ -42,8 +42,22 @@ typedef enum {
     ROF_CMD_SAFE_STATE,            /* Start in SICHERER_ZUSTAND */
     ROF_CMD_SETPOINT_TOO_LOW,      /* Sollwert unter der Grenze */
     ROF_CMD_SETPOINT_TOO_HIGH,     /* Sollwert über der Grenze */
-    ROF_CMD_SETPOINT_NOT_A_NUMBER  /* Sollwert ist keine Zahl */
+    ROF_CMD_SETPOINT_NOT_A_NUMBER, /* Sollwert ist keine Zahl */
+    ROF_CMD_SENSORS_LOCKED,        /* Rolle oder Offset ändern während AUFHEIZEN oder HALTEN */
+    ROF_CMD_UNKNOWN_SENSOR,        /* kein Sensor mit dieser ID */
+    ROF_CMD_INVALID_VALUE,         /* ungültige Rolle oder Offset außerhalb der Grenzen */
+    ROF_CMD_STORAGE_ERROR,         /* Speichern fehlgeschlagen, nichts geändert */
+    ROF_CMD_NOT_IN_SAFE_STATE,     /* Reset außerhalb von SICHERER_ZUSTAND */
+    ROF_CMD_CAUSE_ACTIVE,          /* Reset abgelehnt, die Ursache besteht noch */
+    ROF_CMD_UNKNOWN_COMMAND        /* unbekannter Befehlstyp */
 } rof_cmd_result_t;
+
+/* Ergebnis eines bearbeiteten Befehls, wie es im Snapshot erscheint */
+typedef struct {
+    uint32_t seq;
+    rof_command_type_t type;
+    rof_cmd_result_t result;
+} rof_command_record_t;
 
 typedef struct {
     void *ctx;

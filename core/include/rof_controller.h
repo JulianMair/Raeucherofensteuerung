@@ -32,6 +32,8 @@
 #include <stdint.h>
 
 #define ROF_CONTROLLER_DEFAULT_MAX_COMMANDS 4u
+/* So viele Befehlsergebnisse bleiben abrufbar: zwei volle Zyklen (E-026) */
+#define ROF_CONTROLLER_RECENT_RESULTS 8u
 
 typedef struct {
     unsigned max_commands_per_cycle; /* ARC-09: mehr wartet auf den nächsten Zyklus */
@@ -63,6 +65,10 @@ typedef struct {
     bool was_heating;    /* Ausgang war im letzten Zyklus freigegeben */
     bool has_last_cycle;
     uint64_t last_cycle_ms;
+    /* Ergebnisse der zuletzt bearbeiteten Befehle als Ringpuffer (E-026) */
+    rof_command_record_t recent[ROF_CONTROLLER_RECENT_RESULTS];
+    size_t recent_count;
+    size_t recent_next;
 } rof_controller_t;
 
 /* Die vereinbarten Standardwerte aller Module (E-016, E-021, E-024). */
