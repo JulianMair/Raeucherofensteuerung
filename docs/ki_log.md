@@ -96,4 +96,4 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 - `isnan()` erzeugte auf macOS Zweige, die ein `float` nie nimmt. Statt sie von der Messung auszunehmen, erkennt der Code NaN jetzt über Vergleiche (E-017).
 - Eine veraltete gcov-Zählerdatei verfälschte einmal die lokale Messung. Das Target `coverage` löscht die Zähler seitdem vor jeder Messung.
 
-**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M3 ergänzt.
+**Vom Nutzer geändert oder abgelehnt:** nichts. CI-Lauf #5 nach dem Push war grün, auch die Abdeckungsprüfung mit GCC.
