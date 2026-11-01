@@ -251,6 +251,17 @@ static void test_mock_output_rejects_invalid_duty_and_keeps_last(void)
     TEST_ASSERT_EQUAL_UINT(4, heater_mock.set_calls);
 }
 
+/* Eingespeister Fehler: set_duty scheitert, der alte Tastgrad bleibt */
+static void test_mock_output_injected_error_keeps_last(void)
+{
+    heater_setup();
+    rof_output_set_duty(&heater, 0.5f);
+    mock_output_set_status(&heater_mock, ROF_ERR_IO);
+
+    TEST_ASSERT_EQUAL(ROF_ERR_IO, rof_output_set_duty(&heater, 0.0f));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.5f, heater_mock.duty);
+}
+
 /* ---- Mock-Speicher ----------------------------------------------------- */
 
 static mock_storage_t flash_mock;
@@ -523,6 +534,7 @@ int main(void)
     RUN_TEST(test_mock_output_records_last_duty);
     RUN_TEST(test_mock_output_accepts_bounds);
     RUN_TEST(test_mock_output_rejects_invalid_duty_and_keeps_last);
+    RUN_TEST(test_mock_output_injected_error_keeps_last);
 
     RUN_TEST(test_mock_storage_unknown_key_is_not_found);
     RUN_TEST(test_mock_storage_saves_and_loads_block);
