@@ -257,6 +257,66 @@ static void test_restart_while_holding_does_not_resume_heating(void)
     TEST_ASSERT_TRUE(sim.chamber_c < 30.0);
 }
 
+/* ---- Entkopplung (SAF-13, ARC-09) --------------------------------------- */
+
+/* Ein Webserver, der wild Befehle schickt: ungültige und harmlose gültige.
+ * Er schreibt wie mit Wartezeit 0; ist die Queue voll, scheitert er nur selbst. */
+static void flood_queue(unsigned attempts)
+{
+    const rof_command_t flood[] = {
+        { .type = ROF_COMMAND_SET_SETPOINT, .value_c = 500.0f }, /* zu hoch */
+        { .type = (rof_command_type_t)99 },                     /* unbekannt */
+        { .type = ROF_COMMAND_START },                          /* läuft schon */
+        { .type = ROF_COMMAND_SET_SETPOINT, .value_c = SETPOINT_C },
+        { .type = ROF_COMMAND_RESET },                          /* nicht im sicheren Zustand */
+    };
+    for (unsigned i = 0; i < attempts; i++) {
+        rof_command_t command = flood[i % (sizeof(flood) / sizeof(flood[0]))];
+        command.seq = next_seq++;
+        (void)mock_command_queue_push(&queue_mock, command);
+    }
+}
+
+/* Hält 6 h und prüft je Zyklus Band, Zustand und Befehlsgrenze.
+ * flood_per_second = 0 heißt: kein einziger Befehl mehr. */
+static void hold_six_hours_with(unsigned flood_per_second)
+{
+    for (unsigned s = 0; s < 6 * HOUR_S; s++) {
+        flood_queue(flood_per_second);
+        const unsigned received_before = queue_mock.received;
+
+        run_one_second();
+
+        TEST_ASSERT_TRUE(queue_mock.received - received_before <= ROF_CONTROLLER_DEFAULT_MAX_COMMANDS);
+        TEST_ASSERT_EQUAL(ROF_STATE_HOLDING, state());
+        TEST_ASSERT_EQUAL(ROF_FAULT_NONE, snap.latched_fault);
+        TEST_ASSERT_TRUE(sim.chamber_c >= SETPOINT_C - 1.0 && sim.chamber_c <= SETPOINT_C + 1.0);
+    }
+}
+
+/* SAF-13: die Befehlsqueue wird 6 h lang geflutet, die Regelung hält trotzdem.
+ * Je Zyklus höchstens 4 Befehle, der Rest wartet oder wird beim Absender abgewiesen. */
+static void test_flooded_command_queue_does_not_disturb_control(void)
+{
+    heat_and_hold_for(30 * MINUTE_S);
+
+    hold_six_hours_with(100);
+
+    TEST_ASSERT_TRUE(queue_mock.rejected_pushes > 0); /* die Queue war wirklich voll */
+}
+
+/* SAF-13: nach dem Start kommt kein Befehl mehr, etwa weil der Webserver
+ * abgestürzt ist. Die Regelung hält 6 h ohne ihn. */
+static void test_silent_command_queue_does_not_disturb_control(void)
+{
+    heat_and_hold_for(30 * MINUTE_S);
+    const unsigned received_before = queue_mock.received;
+
+    hold_six_hours_with(0);
+
+    TEST_ASSERT_EQUAL_UINT(received_before, queue_mock.received);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -268,6 +328,9 @@ int main(void)
     RUN_TEST(test_chamber_value_frozen_after_three_hours);
     RUN_TEST(test_stuck_heater_trips_over_temperature_without_start);
     RUN_TEST(test_restart_while_holding_does_not_resume_heating);
+
+    RUN_TEST(test_flooded_command_queue_does_not_disturb_control);
+    RUN_TEST(test_silent_command_queue_does_not_disturb_control);
 
     return UNITY_END();
 }
