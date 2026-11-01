@@ -46,6 +46,11 @@ static rof_state_t next_regular_state(const rof_fsm_t *fsm, float chamber_c)
             return ROF_STATE_HEATING; /* Ü3 */
         }
         return ROF_STATE_HOLDING;
+    case ROF_STATE_COOLING:
+        if (chamber_c < c->cooled_c) {
+            return ROF_STATE_IDLE; /* Ü5 */
+        }
+        return ROF_STATE_COOLING;
     default:
         return fsm->state;
     }
@@ -140,6 +145,14 @@ rof_cmd_result_t rof_fsm_start(rof_fsm_t *fsm)
     default:
         return ROF_CMD_SAFE_STATE;
     }
+}
+
+rof_cmd_result_t rof_fsm_stop(rof_fsm_t *fsm)
+{
+    if (rof_fsm_output_enabled(fsm)) {
+        enter(fsm, ROF_STATE_COOLING); /* Ü4 */
+    }
+    return ROF_CMD_OK;
 }
 
 void rof_fsm_step(rof_fsm_t *fsm, const rof_fsm_input_t *input)

@@ -88,6 +88,11 @@ rof_cmd_result_t rof_fsm_set_setpoint(rof_fsm_t *fsm, const rof_safety_t *safety
  * Sollwert gesetzt ist. Sonst abgelehnt mit Grund. */
 rof_cmd_result_t rof_fsm_start(rof_fsm_t *fsm);
 
+/* Befehl Stopp. Aus AUFHEIZEN oder HALTEN nach ABKUEHLEN. In allen
+ * anderen Zuständen ist der Ausgang schon aus; dann tut Stopp nichts und
+ * gilt trotzdem als erfolgreich. */
+rof_cmd_result_t rof_fsm_stop(rof_fsm_t *fsm);
+
 /* Ein Regelzyklus: wechselt den Zustand nach der Übergangstabelle in
  * docs/zustandsautomat.md. Aufrufen nach der Sicherheitslogik und vor dem Regler. */
 void rof_fsm_step(rof_fsm_t *fsm, const rof_fsm_input_t *input);

@@ -234,6 +234,75 @@ static void test_idle_stays_idle_without_command(void)
     TEST_ASSERT_EQUAL(ROF_STATE_IDLE, rof_fsm_state(&fsm));
 }
 
+/* ---- Stopp und Abkühlen ------------------------------------------------- */
+
+static void go_cooling(void)
+{
+    go_heating();
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, rof_fsm_stop(&fsm));
+    TEST_ASSERT_EQUAL(ROF_STATE_COOLING, rof_fsm_state(&fsm));
+}
+
+/* Ü4: AUFHEIZEN + Stopp -> ABKUEHLEN, Ausgang aus */
+static void test_u4_stop_while_heating_cools_down(void)
+{
+    go_heating();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, rof_fsm_stop(&fsm));
+
+    TEST_ASSERT_EQUAL(ROF_STATE_COOLING, rof_fsm_state(&fsm));
+    TEST_ASSERT_FALSE(rof_fsm_output_enabled(&fsm));
+}
+
+/* Ü4: HALTEN + Stopp -> ABKUEHLEN */
+static void test_u4_stop_while_holding_cools_down(void)
+{
+    go_holding();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, rof_fsm_stop(&fsm));
+
+    TEST_ASSERT_EQUAL(ROF_STATE_COOLING, rof_fsm_state(&fsm));
+}
+
+/* Nichtübergang zu Ü5: genau 50 °C ist noch nicht abgekühlt */
+static void test_cooling_stays_at_threshold(void)
+{
+    go_cooling();
+
+    step_ok(50.0f);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_COOLING, rof_fsm_state(&fsm));
+}
+
+/* Ü5: ABKUEHLEN + Garraum < 50 °C -> BEREIT */
+static void test_u5_cooled_down_is_idle(void)
+{
+    go_cooling();
+
+    step_ok(49.9f);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_IDLE, rof_fsm_state(&fsm));
+}
+
+/* Ü6: ABKUEHLEN + Start -> AUFHEIZEN */
+static void test_u6_start_while_cooling_heats_again(void)
+{
+    go_cooling();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, rof_fsm_start(&fsm));
+
+    TEST_ASSERT_EQUAL(ROF_STATE_HEATING, rof_fsm_state(&fsm));
+}
+
+/* Stopp ohne Heizen tut nichts und gilt als erfolgreich */
+static void test_stop_in_idle_does_nothing(void)
+{
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, rof_fsm_stop(&fsm));
+
+    TEST_ASSERT_EQUAL(ROF_STATE_IDLE, rof_fsm_state(&fsm));
+    TEST_ASSERT_EQUAL_UINT(0, log_mock.count[ROF_LOG_INFO]);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -254,6 +323,13 @@ int main(void)
     RUN_TEST(test_u3_holding_falls_below_reheat_band);
     RUN_TEST(test_u3_raised_setpoint_returns_to_heating);
     RUN_TEST(test_idle_stays_idle_without_command);
+
+    RUN_TEST(test_u4_stop_while_heating_cools_down);
+    RUN_TEST(test_u4_stop_while_holding_cools_down);
+    RUN_TEST(test_cooling_stays_at_threshold);
+    RUN_TEST(test_u5_cooled_down_is_idle);
+    RUN_TEST(test_u6_start_while_cooling_heats_again);
+    RUN_TEST(test_stop_in_idle_does_nothing);
 
     return UNITY_END();
 }
