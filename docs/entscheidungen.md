@@ -214,3 +214,51 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
 - **Verworfen:**
   - Ein Standardsollwert: Nach einem Neustart könnte versehentlich auf einen Wert geheizt werden, den niemand gewählt hat.
   - Stopp ohne Heizen ablehnen: Für Bedienende verwirrend, ohne Sicherheitsgewinn.
+
+## E-023 Langsame PWM als reine Funktion in core (M5)
+
+- **Kontext:** Der Ausgang soll als langsame PWM mit 4 s Periode schalten (CTL-03). Das Interface des Ausgangs bleibt „Tastgrad setzen“ (ARC-02).
+- **Entscheidung:** Vom Nutzer gewählt: `rof_slow_pwm_on(period_ms, duty, now_ms)` in core sagt nur aus Tastgrad und Uhrzeit, ob der Ausgang gerade an ist. In jedem Fenster ist er zuerst `duty * period_ms` lang an, dann aus. Die Funktion hat keinen Zustand und ist auf dem Host voll getestet. Der Simulator schaltet seine Heizung damit, der LED-Treiber nutzt sie in M7. Ungültige Werte schalten aus, nie an.
+- **Verworfen:** Die PWM nur im Treiber. Sie wäre dann nur auf der Hardware prüfbar, und der Simulator hätte mit dem Mittelwert statt mit echtem Ein und Aus gerechnet.
+
+## E-024 PI-Regler: Einstellung nach SIMC, Anti-Windup durch angehaltene Integration (M5)
+
+- **Kontext:** Der Regler braucht begründete Werte für Kp und Ti (CTL-02) und darf nach langem Aufheizen nicht überschwingen.
+- **Entscheidung:**
+  - Kp und Ti folgen der SIMC-Regel nach Skogestad für eine Strecke erster Ordnung mit Totzeit: Verstärkung 130 °C, Zeitkonstante 600 s, Totzeit 30 s plus etwa 2 s durch die PWM. Mit der Zielzeitkonstante gleich der Totzeit ergibt das Kp ≈ 600 / (130 · 64) ≈ 0,072, gerundet 0,075 pro °C, und Ti = min(600, 4 · 64) ≈ 250 s.
+  - Anti-Windup: Steht der Ausgang am Anschlag und drückt der Fehler weiter in dieselbe Richtung, wird der I-Anteil nicht weiter aufaddiert. Das ist einfach zu erklären und zu testen.
+  - Beim Eintritt ins Heizen beginnt der Regler mit leerem I-Anteil. Eine Regelabweichung, die kein Messwert sein kann (NaN, unendlich, über 1000 °C), ergibt Tastgrad 0 und lässt den I-Anteil unberührt.
+  - Gemessen im Simulator bei 80 °C: HALTEN nach 8,8 min, Überschwingen 0,19 °C, danach 79,81 bis 80,19 °C. Nachstellen war nicht nötig.
+- **Verworfen:**
+  - Werte ausprobieren, bis es passt: nicht begründbar.
+  - Anti-Windup durch Rückrechnung (back-calculation): wirksam, aber eine Verstärkung mehr, die man begründen und einstellen müsste.
+
+## E-025 Simulator und Abnahmekriterien (M5)
+
+- **Kontext:** Die Regelung muss auf dem Host über Stunden getestet werden (CTL-01, CTL-06).
+- **Entscheidung:** Vom Nutzer bestätigt:
+  - Umgebung 20 °C, Heizung bei Dauer-An +130 °C, Garraum Zeitkonstante 10 min und Totzeit 30 s, Kern 60 min und 2 min, PWM-Periode 4 s.
+  - Der Simulator rechnet in Schritten von 100 ms nach dem expliziten Euler-Verfahren mit `double`, weil er nur auf dem Host läuft. Die Totzeiten stecken in Ringpuffern. Er ist zugleich die Uhr der Integrationstests: Simulierte Zeit läuft nur mit `sim_oven_advance()`.
+  - Er liegt in einer eigenen Bibliothek `host_sim`, weil er die PWM aus core nutzt; die Mocks kennen weiterhin nur die Interfaces.
+  - Abnahme bei Sollwert 80 °C: HALTEN nach höchstens 30 min, Überschwingen höchstens 3 °C, danach 6 Stunden innerhalb ±1 °C.
+- **Verworfen:** Ein Modell zweiter Ordnung oder mit Wärmeverlust durch Rauchabzug: genauer, aber mit Parametern, die niemand für diesen Ofen kennt. Für den Nachweis der Regelung reicht erste Ordnung mit Totzeit.
+
+## E-026 Befehle, Befehlsquelle und Snapshot (M5)
+
+- **Kontext:** Befehle kommen über eine Queue an den Regeltask, der jeden selbst prüft (ARC-05, ARC-06). Der Zustand geht nur als Kopie nach außen (ARC-07). Eine volle Queue darf die Regelung nie blockieren (ARC-09). core darf FreeRTOS nicht kennen.
+- **Entscheidung:**
+  - Ein Befehl ist ein flaches Struct ohne Zeiger, damit er unverändert durch eine FreeRTOS-Queue passt. Der Befehlstyp beginnt bei 1, ein mit 0 gefüllter Befehl ist also nie gültig.
+  - core kennt nur das Interface `rof_command_source_t`, dessen `receive()` nie wartet. In M7 steckt die FreeRTOS-Queue dahinter, auf dem Host ein Ringpuffer mit 16 Plätzen.
+  - Je Zyklus bearbeitet der Regelzyklus höchstens 4 Befehle, der Rest wartet. Ein überlasteter Webserver kann die Regelung so nicht verzögern.
+  - Neben Sollwert, Start, Stopp, Rolle zuweisen und Reset gibt es „Offset setzen“. Ohne ihn wäre der Kalibrieroffset (SEN-01) nie einstellbar; der Nutzer hat dem Plan mit diesem Befehl zugestimmt. Rolle und Offset sind beim Heizen gesperrt, weil beides den Messwert verschiebt, nach dem geregelt wird (E-022).
+  - Vom Nutzer gewählt: Ergebnisse gehen über den Snapshot zurück. Jeder Befehl hat eine laufende Nummer. Der Regelzyklus hält die letzten 8 Ergebnisse, also zwei volle Zyklen, damit ein Absender sein Ergebnis auch dann findet, wenn mehrere Befehle in einen Zyklus fallen. `rof_snapshot_command_result()` sucht nach der Nummer.
+  - Der Snapshot ist eine vollständige Kopie ohne Zeiger in den Regelzyklus; nur der Sensortyp zeigt auf den konstanten Text des Treibers.
+- **Verworfen:**
+  - Eine eigene Antwort-Queue: ein zweiter Weg aus dem Regeltask, und bei voller Antwort-Queue müsste er Ergebnisse verwerfen.
+  - Nur das letzte Ergebnis im Snapshot: Bei mehreren Befehlen in einem Zyklus fände ein Absender sein Ergebnis nicht.
+
+## E-027 Feste Reihenfolge im Regelzyklus (M5)
+
+- **Kontext:** Die Sicherheitslogik muss vor dem Regler laufen (SAF-01) und das letzte Wort über den Ausgang haben (SAF-02).
+- **Entscheidung:** `rof_controller_cycle()` legt die Reihenfolge an genau einer Stelle fest: Befehle, Sensoren, Sicherheitslogik (mit `heating` aus dem Zustandsautomaten), Zustandsautomat, PI-Regler nur in AUFHEIZEN und HALTEN, `rof_safety_limit_duty()`, Ausgang. `rof_controller_init()` setzt den Ausgang ausdrücklich auf 0 (SAF-10). Der Zeitschritt des Reglers kommt aus der Uhr, nicht aus einer festen Annahme.
+- **Verworfen:** Die Reihenfolge erst in der Firmware festlegen: Sie wäre dann nicht auf dem Host testbar.

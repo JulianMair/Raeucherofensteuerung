@@ -87,3 +87,13 @@ In Prüfreihenfolge. Die erste Ursache, die auslöst, wird verriegelt.
 | aktive Ursache (ohne Verriegelung) | `rof_safety_active()` |
 | Halteband, Rückkehrband | `hold_band_c`, `reheat_band_c` |
 | abgekühlt | `cooled_c` |
+| Regelzyklus (alles zusammen) | `rof_controller`, `rof_controller_cycle()` |
+| Befehlsquelle | `rof_command_source_t` (in der Firmware die FreeRTOS-Queue) |
+| laufende Nummer eines Befehls | `seq` |
+| Snapshot | `rof_snapshot_t` |
+| langsame PWM, Periode | `rof_slow_pwm_on()`, `period_ms` |
+| Verstärkung, Nachstellzeit (PI) | `kp`, `ti_s` |
+| I-Anteil | `integral` |
+| Simulator | `sim_oven` (nur `platform/host`) |
+| Zeitkonstante, Totzeit | `tau_s`, `dead_s` |
+| Kern (Fühler im Fleisch) | `probe` |
