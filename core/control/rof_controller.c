@@ -190,6 +190,12 @@ void rof_controller_snapshot(const rof_controller_t *ctrl, rof_snapshot_t *snaps
     const rof_sensor_registry_t *reg = &ctrl->registry;
     *snapshot = (rof_snapshot_t){
         .time_ms = ctrl->last_cycle_ms,
+        .limits = {
+            .setpoint_min_c = ctrl->config.safety.setpoint_min_c,
+            .setpoint_max_c = ctrl->config.safety.setpoint_max_c,
+            .offset_max_c = ROF_SENSOR_OFFSET_MAX_C,
+            .hard_max_c = ROF_SAFETY_HARD_MAX_C,
+        },
         .state = rof_fsm_state(&ctrl->fsm),
         .duty = ctrl->applied_duty,
         .latched_fault = rof_safety_fault(&ctrl->safety),

@@ -93,8 +93,18 @@ typedef struct {
     float temp_c; /* letzter gültiger Wert inklusive Offset */
 } rof_channel_snapshot_t;
 
+/* Grenzen für Eingaben, damit Webserver und Oberfläche sie prüfen können,
+ * ohne core aufzurufen (ARC-04, E-028) */
+typedef struct {
+    float setpoint_min_c;
+    float setpoint_max_c;
+    float offset_max_c; /* Offset erlaubt von -offset_max_c bis +offset_max_c */
+    float hard_max_c;   /* harte Grenze, nur zur Anzeige */
+} rof_limits_t;
+
 typedef struct {
     uint64_t time_ms; /* Zeitpunkt des letzten Zyklus */
+    rof_limits_t limits;
     rof_state_t state;
     bool has_setpoint;
     float setpoint_c;

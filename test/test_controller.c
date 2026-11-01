@@ -638,6 +638,28 @@ static void test_snapshot_shows_faults(void)
     TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_MISSING, snap.roles[ROF_ROLE_CHAMBER].status);
 }
 
+/* E-028: die Grenzen stehen im Snapshot, damit Webserver und Oberfläche
+ * prüfen können, ohne core aufzurufen */
+static void test_snapshot_shows_limits(void)
+{
+    rof_controller_snapshot(&ctrl, &snap);
+
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 20.0f, snap.limits.setpoint_min_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 110.0f, snap.limits.setpoint_max_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, ROF_SENSOR_OFFSET_MAX_C, snap.limits.offset_max_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, ROF_SAFETY_HARD_MAX_C, snap.limits.hard_max_c);
+}
+
+static void test_snapshot_limits_follow_config(void)
+{
+    config.safety.setpoint_max_c = 95.0f;
+    TEST_ASSERT_EQUAL(ROF_OK, rof_controller_init(&ctrl, &config, &io));
+
+    rof_controller_snapshot(&ctrl, &snap);
+
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 95.0f, snap.limits.setpoint_max_c);
+}
+
 /* E-026: Ergebnisse, neuestes zuerst, und Suche nach der Nummer */
 static void test_snapshot_command_results(void)
 {
@@ -713,6 +735,8 @@ int main(void)
     RUN_TEST(test_snapshot_shows_state_setpoint_duty_and_roles);
     RUN_TEST(test_snapshot_lists_channels);
     RUN_TEST(test_snapshot_shows_faults);
+    RUN_TEST(test_snapshot_shows_limits);
+    RUN_TEST(test_snapshot_limits_follow_config);
     RUN_TEST(test_snapshot_command_results);
     RUN_TEST(test_snapshot_results_wrap_around);
 
