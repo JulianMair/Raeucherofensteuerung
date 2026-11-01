@@ -185,6 +185,61 @@ rof_status_t rof_controller_init(rof_controller_t *ctrl, const rof_controller_co
     return ROF_OK;
 }
 
+void rof_controller_snapshot(const rof_controller_t *ctrl, rof_snapshot_t *snapshot)
+{
+    const rof_sensor_registry_t *reg = &ctrl->registry;
+    *snapshot = (rof_snapshot_t){
+        .time_ms = ctrl->last_cycle_ms,
+        .state = rof_fsm_state(&ctrl->fsm),
+        .duty = ctrl->applied_duty,
+        .latched_fault = rof_safety_fault(&ctrl->safety),
+        .active_fault = rof_safety_active(&ctrl->safety),
+        .sensor_overflow = rof_sensor_registry_overflow(reg),
+    };
+    snapshot->has_setpoint = rof_fsm_setpoint(&ctrl->fsm, &snapshot->setpoint_c);
+
+    snapshot->roles[ROF_ROLE_UNASSIGNED].status = ROF_ROLE_STATUS_UNASSIGNED;
+    for (int role = ROF_ROLE_UNASSIGNED + 1; role < ROF_ROLE_COUNT; role++) {
+        rof_role_snapshot_t *r = &snapshot->roles[role];
+        r->status = rof_sensor_registry_role(reg, (rof_role_t)role, &r->temp_c);
+    }
+
+    snapshot->channel_count = rof_sensor_registry_channel_count(reg);
+    for (size_t i = 0; i < snapshot->channel_count; i++) {
+        const rof_sensor_channel_t *ch = rof_sensor_registry_channel(reg, i);
+        snapshot->channels[i] = (rof_channel_snapshot_t){
+            .id = ch->id,
+            .type = ch->type,
+            .role = ch->role,
+            .offset_c = ch->offset_c,
+            .present = ch->present,
+            .duplicate = ch->duplicate,
+            .read_status = ch->read_status,
+            .temp_c = ch->temp_c,
+        };
+    }
+
+    /* Ringpuffer neuestes zuerst: rückwärts ab dem zuletzt geschriebenen */
+    snapshot->recent_count = ctrl->recent_count;
+    for (size_t i = 0; i < ctrl->recent_count; i++) {
+        const size_t index = (ctrl->recent_next + ROF_CONTROLLER_RECENT_RESULTS - 1 - i) %
+                             ROF_CONTROLLER_RECENT_RESULTS;
+        snapshot->recent[i] = ctrl->recent[index];
+    }
+}
+
+bool rof_snapshot_command_result(const rof_snapshot_t *snapshot, uint32_t seq,
+                                 rof_cmd_result_t *result)
+{
+    for (size_t i = 0; i < snapshot->recent_count; i++) {
+        if (snapshot->recent[i].seq == seq) {
+            *result = snapshot->recent[i].result;
+            return true;
+        }
+    }
+    return false;
+}
+
 void rof_controller_cycle(rof_controller_t *ctrl)
 {
     const uint64_t now_ms = rof_clock_now_ms(ctrl->io.clk);

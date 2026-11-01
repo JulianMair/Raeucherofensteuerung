@@ -13,6 +13,8 @@
 #include "mock_temp_sensor.h"
 #include "rof_controller.h"
 
+#include <string.h>
+
 #define CHAMBER_ID 0x28CC000000000001ULL
 #define PROBE_ID 0x28CC000000000002ULL
 
@@ -561,6 +563,118 @@ static void test_last_eight_results_are_kept(void)
     TEST_ASSERT_TRUE(has_result(12));
 }
 
+/* ---- Snapshot (ARC-07) -------------------------------------------------- */
+
+static rof_snapshot_t snap;
+
+/* Vor dem ersten Zyklus: BEREIT, kein Sollwert, Ausgang 0, keine Ergebnisse */
+static void test_snapshot_before_first_cycle(void)
+{
+    memset(&snap, 0xAB, sizeof(snap)); /* Müll, damit jedes Feld wirklich geschrieben werden muss */
+
+    rof_controller_snapshot(&ctrl, &snap);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_IDLE, snap.state);
+    TEST_ASSERT_FALSE(snap.has_setpoint);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, snap.duty);
+    TEST_ASSERT_EQUAL_size_t(0, snap.recent_count);
+}
+
+/* Zustand, Sollwert, Tastgrad, Zeit und Rollen */
+static void test_snapshot_shows_state_setpoint_duty_and_roles(void)
+{
+    assign_chamber();
+    set_chamber(75.0f);
+    start_heating(80.0f);
+    cycle();
+
+    rof_controller_snapshot(&ctrl, &snap);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_HEATING, snap.state);
+    TEST_ASSERT_TRUE(snap.has_setpoint);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 80.0f, snap.setpoint_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.3765f, snap.duty);
+    TEST_ASSERT_EQUAL_UINT64(rof_clock_now_ms(&clk_if), snap.time_ms);
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_OK, snap.roles[ROF_ROLE_CHAMBER].status);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.0f, snap.roles[ROF_ROLE_CHAMBER].temp_c);
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_UNASSIGNED, snap.roles[ROF_ROLE_PROBE_1].status);
+}
+
+/* SEN-01: alle Kanäle mit ID, Typ, Rolle und Wert */
+static void test_snapshot_lists_channels(void)
+{
+    assign_chamber();
+    set_chamber(75.0f);
+    cycle();
+
+    rof_controller_snapshot(&ctrl, &snap);
+
+    TEST_ASSERT_EQUAL_size_t(2, snap.channel_count);
+    TEST_ASSERT_EQUAL_UINT64(CHAMBER_ID, snap.channels[0].id);
+    TEST_ASSERT_EQUAL_STRING("DS18B20", snap.channels[0].type);
+    TEST_ASSERT_EQUAL(ROF_ROLE_CHAMBER, snap.channels[0].role);
+    TEST_ASSERT_TRUE(snap.channels[0].present);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.0f, snap.channels[0].temp_c);
+    TEST_ASSERT_EQUAL_UINT64(PROBE_ID, snap.channels[1].id);
+    TEST_ASSERT_EQUAL(ROF_ROLE_UNASSIGNED, snap.channels[1].role);
+    TEST_ASSERT_FALSE(snap.sensor_overflow);
+}
+
+/* WEB-03 Vorbereitung: verriegelte und aktive Ursache sind sichtbar */
+static void test_snapshot_shows_faults(void)
+{
+    assign_chamber();
+    set_chamber(75.0f);
+    start_heating(80.0f);
+    cycle();
+    mock_temp_sensor_unplug(&bus_mock, CHAMBER_ID);
+    cycle();
+
+    rof_controller_snapshot(&ctrl, &snap);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_SAFE_STATE, snap.state);
+    TEST_ASSERT_EQUAL(ROF_FAULT_CHAMBER_MISSING, snap.latched_fault);
+    TEST_ASSERT_EQUAL(ROF_FAULT_CHAMBER_MISSING, snap.active_fault);
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_MISSING, snap.roles[ROF_ROLE_CHAMBER].status);
+}
+
+/* E-026: Ergebnisse, neuestes zuerst, und Suche nach der Nummer */
+static void test_snapshot_command_results(void)
+{
+    rof_cmd_result_t result = ROF_CMD_OK;
+    send_setpoint(1, 80.0f);
+    send_setpoint(2, 200.0f);
+    send_simple(3, ROF_COMMAND_STOP);
+    cycle();
+
+    rof_controller_snapshot(&ctrl, &snap);
+
+    TEST_ASSERT_EQUAL_size_t(3, snap.recent_count);
+    TEST_ASSERT_EQUAL_UINT32(3, snap.recent[0].seq);
+    TEST_ASSERT_EQUAL(ROF_COMMAND_STOP, snap.recent[0].type);
+    TEST_ASSERT_EQUAL_UINT32(1, snap.recent[2].seq);
+    TEST_ASSERT_TRUE(rof_snapshot_command_result(&snap, 2, &result));
+    TEST_ASSERT_EQUAL(ROF_CMD_SETPOINT_TOO_HIGH, result);
+    TEST_ASSERT_FALSE(rof_snapshot_command_result(&snap, 42, &result));
+}
+
+/* E-026: auch über das Ende des Ringpuffers hinweg neuestes zuerst */
+static void test_snapshot_results_wrap_around(void)
+{
+    for (uint32_t seq = 1; seq <= 10; seq++) {
+        send_setpoint(seq, 80.0f);
+    }
+    cycle();
+    cycle();
+    cycle();
+
+    rof_controller_snapshot(&ctrl, &snap);
+
+    TEST_ASSERT_EQUAL_size_t(ROF_CONTROLLER_RECENT_RESULTS, snap.recent_count);
+    TEST_ASSERT_EQUAL_UINT32(10, snap.recent[0].seq);
+    TEST_ASSERT_EQUAL_UINT32(3, snap.recent[ROF_CONTROLLER_RECENT_RESULTS - 1].seq);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -594,6 +708,13 @@ int main(void)
     RUN_TEST(test_reset_with_cause_active_is_rejected);
     RUN_TEST(test_reset_after_cause_is_gone_returns_to_idle);
     RUN_TEST(test_last_eight_results_are_kept);
+
+    RUN_TEST(test_snapshot_before_first_cycle);
+    RUN_TEST(test_snapshot_shows_state_setpoint_duty_and_roles);
+    RUN_TEST(test_snapshot_lists_channels);
+    RUN_TEST(test_snapshot_shows_faults);
+    RUN_TEST(test_snapshot_command_results);
+    RUN_TEST(test_snapshot_results_wrap_around);
 
     return UNITY_END();
 }
