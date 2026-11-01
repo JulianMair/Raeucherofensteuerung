@@ -36,6 +36,10 @@ add_executable(test_controller test_controller.c)
 target_link_libraries(test_controller PRIVATE unity rof_core platform_host project_warnings)
 add_test(NAME controller COMMAND test_controller)
 
+add_executable(test_integration test_integration.c)
+target_link_libraries(test_integration PRIVATE unity host_sim platform_host project_warnings)
+add_test(NAME integration COMMAND test_integration)
+
 # Include-Regeln (CI-02): Prüfung des echten Projekts plus Gegenproben.
 # Jede Gegenprobe ist ein kleiner Ordner mit einem absichtlichen Verstoß.
 # Sie besteht nur, wenn genau die erwartete Meldung erscheint.
