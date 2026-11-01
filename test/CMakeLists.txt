@@ -20,6 +20,10 @@ add_executable(test_state_machine test_state_machine.c)
 target_link_libraries(test_state_machine PRIVATE unity rof_core platform_host project_warnings)
 add_test(NAME state_machine COMMAND test_state_machine)
 
+add_executable(test_slow_pwm test_slow_pwm.c)
+target_link_libraries(test_slow_pwm PRIVATE unity rof_core project_warnings)
+add_test(NAME slow_pwm COMMAND test_slow_pwm)
+
 # Include-Regeln (CI-02): Prüfung des echten Projekts plus Gegenproben.
 # Jede Gegenprobe ist ein kleiner Ordner mit einem absichtlichen Verstoß.
 # Sie besteht nur, wenn genau die erwartete Meldung erscheint.

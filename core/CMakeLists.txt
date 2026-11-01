@@ -5,6 +5,7 @@ target_include_directories(rof_core_interfaces INTERFACE include)
 
 # Die Logik von core
 add_library(rof_core STATIC
+    control/rof_slow_pwm.c
     control/rof_state_machine.c
     safety/rof_safety.c
     sensors/rof_sensor_registry.c
