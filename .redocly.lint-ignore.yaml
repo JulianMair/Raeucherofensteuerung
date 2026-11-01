@@ -1,0 +1,14 @@
+# Begründete Ausnahmen von den Redocly-Regeln für einzelne Stellen (E-029).
+# Erzeugt mit `redocly lint --generate-ignore-file`, Begründungen von Hand.
+# Jede neue Ausnahme braucht hier eine Begründung.
+docs/api.yaml:
+  # Reines Lesen ohne Parameter: Es gibt keinen Fehler auf Seite des
+  # Aufrufers, den ein 4xx-Status beschreiben könnte. Ein erfundener
+  # 4xx-Fall wäre falsch dokumentiert.
+  operation-4xx-response:
+    - '#/paths/~1api~1state/get/responses'
+    - '#/paths/~1api~1config/get/responses'
+  # Ein WebSocket antwortet laut RFC 6455 mit 101 (Switching Protocols),
+  # nie mit 2xx.
+  operation-2xx-response:
+    - '#/paths/~1ws/get/responses'

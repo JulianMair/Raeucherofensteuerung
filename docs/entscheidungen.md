@@ -262,3 +262,27 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
 - **Kontext:** Die Sicherheitslogik muss vor dem Regler laufen (SAF-01) und das letzte Wort über den Ausgang haben (SAF-02).
 - **Entscheidung:** `rof_controller_cycle()` legt die Reihenfolge an genau einer Stelle fest: Befehle, Sensoren, Sicherheitslogik (mit `heating` aus dem Zustandsautomaten), Zustandsautomat, PI-Regler nur in AUFHEIZEN und HALTEN, `rof_safety_limit_duty()`, Ausgang. `rof_controller_init()` setzt den Ausgang ausdrücklich auf 0 (SAF-10). Der Zeitschritt des Reglers kommt aus der Uhr, nicht aus einer festen Annahme.
 - **Verworfen:** Die Reihenfolge erst in der Firmware festlegen: Sie wäre dann nicht auf dem Host testbar.
+
+## E-028 Form der API (M6)
+
+- **Kontext:** `docs/api.yaml` ist die einzige Quelle der Schnittstelle (API-01). Webserver (M8) und Oberfläche (M9) richten sich danach.
+- **Entscheidung:**
+  - REST für Lesen und Befehle, ein WebSocket `/ws`, der jede Sekunde denselben Zustand wie `GET /api/state` schickt.
+  - Sensor-IDs sind Texte aus 16 Hex-Ziffern. JavaScript stellt ganze Zahlen nur bis 2^53 genau dar, eine 64-Bit-ROM-Adresse ginge als Zahl kaputt.
+  - Enum-Werte sind englische Texte in Kleinbuchstaben, wie die Bezeichner im Code (E-006). Temperaturen ohne gültigen Wert sind `null`, weil JSON kein NaN kennt.
+  - HTTP-Status nach Ursache: 400 kaputte oder unvollständige Anfrage, 409 Befehl passt nicht zum Zustand, 413 zu groß, 422 Wert außerhalb der Grenzen, 500 Speicherfehler, 503 Queue voll, 504 kein Ergebnis nach 2 s.
+  - Die Grenzen stehen im Snapshot und sind über `GET /api/config` lesbar. So prüfen proto und die Oberfläche vorab, ohne core aufzurufen (ARC-04); der Regeltask prüft trotzdem selbst (ARC-06).
+  - Das Beispiel für den Zustand liegt als eigene Datei `docs/api-examples/state.json`. proto muss genau dieses JSON erzeugen (Test), und die Oberfläche kann es in M9 als Testdaten nutzen.
+- **Verworfen:**
+  - IDs als JSON-Zahlen: in JavaScript nicht genau darstellbar.
+  - Deutsche Enum-Texte: Code und API wären unterschiedlich benannt.
+  - Nur `GET /api/state`, Grenzen fest in der Oberfläche: Bei einer anderen Konfiguration würden Oberfläche und Gerät auseinanderlaufen.
+
+## E-029 Prüfung der OpenAPI-Datei mit Redocly (M6)
+
+- **Kontext:** Eine fehlerhafte `api.yaml` soll sofort auffallen, nicht erst in M9 (vom Nutzer gewählt).
+- **Entscheidung:** CI prüft `docs/api.yaml` mit `@redocly/cli` in fester Version 2.64.0 über `npx`. `redocly.yaml` nutzt `recommended-strict`, damit jede Warnung die CI rot macht. Drei Stellen sind einzeln in `.redocly.lint-ignore.yaml` ausgenommen, jede mit Begründung: `GET /api/state` und `GET /api/config` haben keinen 4xx-Fall, und ein WebSocket antwortet mit 101 statt 2xx.
+- **Verworfen:**
+  - Die beiden Regeln ganz abschalten: Dann fielen auch echte Lücken bei anderen Pfaden nicht mehr auf.
+  - Erfundene 4xx- oder 2xx-Antworten eintragen: Die Datei würde etwas beschreiben, das es nicht gibt.
+  - Die neueste Version: Sie war erst zwei Tage alt. Eine Version mit gut zwei Wochen Abstand ist für eine feste Prüfung stabiler.

@@ -40,3 +40,8 @@ jobs:
           cmake -S . -B build-cov -G Ninja -DCMAKE_BUILD_TYPE=Debug -DROF_COVERAGE=ON
           cmake --build build-cov
           cmake --build build-cov --target coverage
+
+      # docs/api.yaml ist die einzige Quelle der Schnittstelle (API-01).
+      # Version fest, Regeln in redocly.yaml (E-029).
+      - name: OpenAPI prüfen
+        run: npx --yes @redocly/cli@2.64.0 lint docs/api.yaml

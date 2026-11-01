@@ -1,0 +1,6 @@
+# Prüfung von docs/api.yaml mit Redocly (E-029).
+# recommended-strict macht jede Warnung zum Fehler, damit CI bei jedem
+# Verstoß scheitert. Begründete Ausnahmen für einzelne Stellen stehen in
+# .redocly.lint-ignore.yaml.
+extends:
+  - recommended-strict
