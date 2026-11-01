@@ -180,12 +180,94 @@ static void test_stop_cools_down_to_idle(void)
     TEST_ASSERT_TRUE(snap.roles[ROF_ROLE_CHAMBER].temp_c < 50.0f);
 }
 
+/* ---- Fehler nach Stunden (CTL-06, SAF-02 bis SAF-07, SAF-10) ------------ */
+
+static void heat_and_hold_for(unsigned seconds)
+{
+    prepare_oven();
+    start_at(SETPOINT_C);
+    run_until_state(ROF_STATE_HOLDING, 30 * MINUTE_S);
+    run_seconds(seconds);
+    TEST_ASSERT_EQUAL(ROF_STATE_HOLDING, state());
+}
+
+/* CTL-06, SAF-07: Garraumsensor fällt nach 3 h aus. Sofort sicherer Zustand,
+ * Ausgang 0, der Ofen kühlt ab und bleibt aus. */
+static void test_chamber_sensor_lost_after_three_hours(void)
+{
+    heat_and_hold_for(3 * HOUR_S);
+
+    sim.chamber_unplugged = true;
+    run_one_second();
+
+    TEST_ASSERT_EQUAL(ROF_STATE_SAFE_STATE, state());
+    TEST_ASSERT_EQUAL(ROF_FAULT_CHAMBER_MISSING, snap.latched_fault);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, snap.duty);
+
+    run_seconds(HOUR_S);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_SAFE_STATE, state());
+    TEST_ASSERT_TRUE(sim.chamber_c < 30.0);
+}
+
+/* CTL-06, SAF-05: Garraumwert friert nach 3 h ein. Nach 10 min sicherer Zustand. */
+static void test_chamber_value_frozen_after_three_hours(void)
+{
+    heat_and_hold_for(3 * HOUR_S);
+
+    sim_oven_freeze_chamber(&sim);
+    run_seconds(9 * MINUTE_S);
+    TEST_ASSERT_EQUAL(ROF_STATE_HOLDING, state());
+    const unsigned to_safe_s = run_until_state(ROF_STATE_SAFE_STATE, 2 * MINUTE_S);
+
+    TEST_ASSERT_TRUE(to_safe_s <= 2 * MINUTE_S);
+    TEST_ASSERT_EQUAL(ROF_FAULT_FROZEN, snap.latched_fault);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, snap.duty);
+}
+
+/* SAF-06: die Heizung klemmt, ohne dass jemand gestartet hat. Bei über 120 °C
+ * verriegelt die Sicherheitslogik, obwohl gar nicht geheizt wird (E-020). */
+static void test_stuck_heater_trips_over_temperature_without_start(void)
+{
+    prepare_oven();
+    sim.heater_stuck_on = true;
+
+    const unsigned to_safe_s = run_until_state(ROF_STATE_SAFE_STATE, HOUR_S);
+
+    TEST_ASSERT_TRUE(to_safe_s <= HOUR_S);
+    TEST_ASSERT_EQUAL(ROF_FAULT_OVER_TEMPERATURE, snap.latched_fault);
+    TEST_ASSERT_TRUE(sim.chamber_c > 120.0);
+    TEST_ASSERT_TRUE(sim.chamber_c < 121.0);
+}
+
+/* SAF-10, SEN-04: Neustart nach 2 h Halten. BEREIT, Ausgang 0, Rollen wieder
+ * da, und ohne neuen Start wird nicht geheizt. */
+static void test_restart_while_holding_does_not_resume_heating(void)
+{
+    heat_and_hold_for(2 * HOUR_S);
+
+    TEST_ASSERT_EQUAL(ROF_OK, rof_controller_init(&ctrl, &config, &io));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, sim.duty);
+    run_seconds(HOUR_S);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_IDLE, state());
+    TEST_ASSERT_FALSE(snap.has_setpoint);
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_OK, snap.roles[ROF_ROLE_CHAMBER].status);
+    TEST_ASSERT_EQUAL(ROF_ROLE_STATUS_OK, snap.roles[ROF_ROLE_PROBE_1].status);
+    TEST_ASSERT_TRUE(sim.chamber_c < 30.0);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
 
     RUN_TEST(test_heats_and_holds_for_six_hours);
     RUN_TEST(test_stop_cools_down_to_idle);
+
+    RUN_TEST(test_chamber_sensor_lost_after_three_hours);
+    RUN_TEST(test_chamber_value_frozen_after_three_hours);
+    RUN_TEST(test_stuck_heater_trips_over_temperature_without_start);
+    RUN_TEST(test_restart_while_holding_does_not_resume_heating);
 
     return UNITY_END();
 }
