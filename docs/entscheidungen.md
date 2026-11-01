@@ -188,3 +188,29 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
   - `rof_safety_limit_duty()` liefert 0 bei Verriegelung und auch bei einer nur aktiven Ursache. „Bei einem Fehler ist der Ausgang 0“ gilt damit in jedem Zustand.
 - **Abweichung vom Wortlaut:** CLAUDE.md verlangt, dass bei einem Fehler `SICHERER_ZUSTAND` gesetzt bleibt. Ohne Heizen ist es jetzt `FEHLER`. Der Ausgang ist in beiden Fällen 0; der Unterschied betrifft nur, ob ein Reset nötig ist.
 - **Verworfen:** In jedem Zustand verriegeln und `FEHLER` für nicht sicherheitsrelevante Fehler verwenden, etwa einen ausgefallenen Kernfühler. Das entspricht dem Wortlaut, verlangt aber nach jedem Einschalten ohne Garraumsensor einen Reset und gibt `FEHLER` eine Bedeutung, die CLAUDE.md nicht fordert.
+
+## E-021 Schwellen für die Zustandswechsel (M4)
+
+- **Kontext:** AUFHEIZEN, HALTEN und ABKUEHLEN brauchen Bedingungen für den Wechsel. CLAUDE.md legt keine fest.
+- **Entscheidung:** Vom Nutzer bestätigt, konfigurierbar in `rof_fsm_config_t`:
+  - AUFHEIZEN → HALTEN, sobald der Garraum Sollwert − 2 °C erreicht.
+  - HALTEN → AUFHEIZEN, wenn er unter Sollwert − 10 °C fällt, etwa bei offener Tür oder einem deutlich erhöhten Sollwert.
+  - ABKUEHLEN → BEREIT, sobald er unter 50 °C liegt.
+  - `init` verlangt, dass das Rückkehrband größer ist als das Halteband. Der Abstand zwischen beiden (Hysterese) verhindert, dass der Zustand bei kleinen Schwankungen um den Sollwert ständig wechselt.
+- **Verworfen:**
+  - Eine einzige Schwelle für Hin- und Rückweg: Schon kleine Schwankungen würden den Zustand hin- und herschalten.
+  - HALTEN bis zum Stopp, ohne Rückkehr nach AUFHEIZEN: Nach offener Tür oder erhöhtem Sollwert zeigte die Oberfläche fälschlich „Halten“.
+
+## E-022 Regeln für Befehle im Zustandsautomaten (M4)
+
+- **Kontext:** Befehle kommen über die Queue aus dem Netz (ARC-05) und müssen im Regeltask geprüft werden (ARC-06). Ein ungültiger Befehl darf den Zustand nicht ändern.
+- **Entscheidung:**
+  - Jeder Befehl liefert ein `rof_cmd_result_t`. Bei Ablehnung bleibt der Zustand, und der Grund wird gemeldet.
+  - Start ohne gesetzten Sollwert wird abgelehnt (`NO_SETPOINT`, vom Nutzer gewählt). Nach einem Neustart ist kein Sollwert gesetzt, geheizt wird also nur auf einen bewusst gesetzten Wert.
+  - Start ist aus BEREIT und aus ABKUEHLEN erlaubt; aus ABKUEHLEN heizt der Ofen einfach wieder.
+  - Stopp ohne Heizen tut nichts und gilt als erfolgreich. Ein Stopp-Knopf soll nie mit einer Fehlermeldung antworten, wenn der Ausgang ohnehin aus ist.
+  - Rollen zuweisen ist während AUFHEIZEN und HALTEN gesperrt (vom Nutzer gewählt). Wer mitten im Heizen den Garraum auf einen anderen Fühler legt, regelte sonst plötzlich nach einem falschen Wert. Die Sperre fragt der Regelzyklus über `rof_fsm_roles_editable()` ab.
+  - Den Reset führt der Regelzyklus über `rof_safety_reset()` aus. Der Automat sieht danach „nicht mehr verriegelt“ und geht nach BEREIT (Ü10), nie direkt zurück ins Heizen.
+- **Verworfen:**
+  - Ein Standardsollwert: Nach einem Neustart könnte versehentlich auf einen Wert geheizt werden, den niemand gewählt hat.
+  - Stopp ohne Heizen ablehnen: Für Bedienende verwirrend, ohne Sicherheitsgewinn.

@@ -81,3 +81,9 @@ In Prüfreihenfolge. Die erste Ursache, die auslöst, wird verriegelt.
 | Zeitfenster des Regelzyklus | `cycle_window_ms` |
 | Bezugswert (eingefrorener Wert) | `reference_c`, `reference_ms` |
 | Sollwertprüfung | `rof_safety_check_setpoint`, Ergebnis `rof_setpoint_check_t` |
+| Zustandsautomat | `rof_fsm_…` (finite state machine), Zustand `rof_state_t` |
+| Übergang | Ü1 bis Ü10 in `docs/zustandsautomat.md`, im Code als Kommentar |
+| Befehl, Befehlsergebnis | `rof_cmd_result_t` (`ROF_CMD_…`) |
+| aktive Ursache (ohne Verriegelung) | `rof_safety_active()` |
+| Halteband, Rückkehrband | `hold_band_c`, `reheat_band_c` |
+| abgekühlt | `cooled_c` |
