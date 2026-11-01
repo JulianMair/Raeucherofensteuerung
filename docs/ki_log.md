@@ -97,3 +97,24 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 - Eine veraltete gcov-Zählerdatei verfälschte einmal die lokale Messung. Das Target `coverage` löscht die Zähler seitdem vor jeder Messung.
 
 **Vom Nutzer geändert oder abgelehnt:** nichts. CI-Lauf #5 nach dem Push war grün, auch die Abdeckungsprüfung mit GCC.
+
+## 2026-11-01 – M4 Zustandsautomat
+
+**Modell:** Claude Opus 5.5
+
+**Von der KI erzeugt:**
+- Plan für M4 mit Rückfragen zu FEHLER und SICHERER_ZUSTAND, Rollen beim Heizen, Schwellen und Start ohne Sollwert
+- Änderung der Sicherheitslogik: Verriegeln nur beim Heizen oder bei Übertemperatur, `rof_safety_active()`, `limit_duty` auch bei aktiver Ursache 0; drei neue Tests, Abdeckung weiter 100 Prozent
+- Zustandsautomat `core/include/rof_state_machine.h` und `core/control/rof_state_machine.c`, testgetrieben in sechs Schritten
+- 38 Unity-Tests in `test/test_state_machine.c`, jeder Übergang Ü1 bis Ü10 mit mindestens einem Test
+- `docs/zustandsautomat.md` mit Zustands-, Übergangs- und Befehlstabelle und Diagramm
+- Entscheidungen E-020 bis E-022, Glossar, Nachweise für CTL-04, CTL-05 und SAF-10
+
+**Vom Nutzer entschieden:**
+- FEHLER als Startsperre ohne Heizen; verriegelt wird nur beim Heizen oder bei Übertemperatur. Claude hat darauf hingewiesen, dass das vom Wortlaut in CLAUDE.md abweicht (E-020).
+- Rollen zuweisen nur ohne Heizen
+- Schwellen 2 °C, 10 °C und 50 °C
+- Start ohne Sollwert wird abgelehnt
+- Plan für M4 ohne Änderungen freigegeben
+
+**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M4 ergänzt.
