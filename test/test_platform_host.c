@@ -7,6 +7,7 @@
 #include "unity.h"
 
 #include "fake_clock.h"
+#include "mock_command_queue.h"
 #include "mock_log.h"
 #include "mock_output.h"
 #include "mock_storage.h"
@@ -434,6 +435,71 @@ static void test_mock_log_truncates_long_message(void)
     TEST_ASSERT_EQUAL_size_t(MOCK_LOG_MSG_MAX - 1, strlen(logger_mock.last_msg));
 }
 
+/* ---- Mock-Befehlsqueue -------------------------------------------------- */
+
+static mock_command_queue_t queue_mock;
+static rof_command_source_t commands;
+
+static void queue_setup(void)
+{
+    mock_command_queue_init(&queue_mock);
+    commands = mock_command_queue_source(&queue_mock);
+}
+
+static rof_command_t command_with_seq(uint32_t seq)
+{
+    rof_command_t cmd = { .seq = seq, .type = ROF_COMMAND_START };
+    return cmd;
+}
+
+static void test_queue_empty_receives_nothing(void)
+{
+    queue_setup();
+    rof_command_t cmd = { 0 };
+
+    TEST_ASSERT_FALSE(rof_command_source_receive(&commands, &cmd));
+}
+
+/* Befehle kommen in der Reihenfolge an, in der sie gesendet wurden */
+static void test_queue_delivers_in_order(void)
+{
+    queue_setup();
+    rof_command_t cmd = { 0 };
+    TEST_ASSERT_TRUE(mock_command_queue_push(&queue_mock, command_with_seq(1)));
+    TEST_ASSERT_TRUE(mock_command_queue_push(&queue_mock, command_with_seq(2)));
+
+    TEST_ASSERT_TRUE(rof_command_source_receive(&commands, &cmd));
+    TEST_ASSERT_EQUAL_UINT32(1, cmd.seq);
+    TEST_ASSERT_TRUE(rof_command_source_receive(&commands, &cmd));
+    TEST_ASSERT_EQUAL_UINT32(2, cmd.seq);
+    TEST_ASSERT_FALSE(rof_command_source_receive(&commands, &cmd));
+    TEST_ASSERT_EQUAL_UINT(2, queue_mock.received);
+}
+
+/* Wie eine FreeRTOS-Queue mit Wartezeit 0: voll heißt, der Absender scheitert sofort */
+static void test_queue_full_rejects_push(void)
+{
+    queue_setup();
+    for (uint32_t seq = 0; seq < MOCK_COMMAND_QUEUE_CAPACITY; seq++) {
+        TEST_ASSERT_TRUE(mock_command_queue_push(&queue_mock, command_with_seq(seq)));
+    }
+
+    TEST_ASSERT_FALSE(mock_command_queue_push(&queue_mock, command_with_seq(99)));
+    TEST_ASSERT_EQUAL_UINT(1, queue_mock.rejected_pushes);
+}
+
+/* Nach dem Abholen ist wieder Platz, auch über das Pufferende hinweg */
+static void test_queue_wraps_around(void)
+{
+    queue_setup();
+    rof_command_t cmd = { 0 };
+    for (uint32_t seq = 0; seq < 3 * MOCK_COMMAND_QUEUE_CAPACITY; seq++) {
+        TEST_ASSERT_TRUE(mock_command_queue_push(&queue_mock, command_with_seq(seq)));
+        TEST_ASSERT_TRUE(rof_command_source_receive(&commands, &cmd));
+        TEST_ASSERT_EQUAL_UINT32(seq, cmd.seq);
+    }
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -471,6 +537,11 @@ int main(void)
     RUN_TEST(test_mock_log_counts_per_level_and_keeps_last);
     RUN_TEST(test_mock_log_copies_message);
     RUN_TEST(test_mock_log_truncates_long_message);
+
+    RUN_TEST(test_queue_empty_receives_nothing);
+    RUN_TEST(test_queue_delivers_in_order);
+    RUN_TEST(test_queue_full_rejects_push);
+    RUN_TEST(test_queue_wraps_around);
 
     return UNITY_END();
 }

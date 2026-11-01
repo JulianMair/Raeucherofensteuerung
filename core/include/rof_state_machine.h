@@ -8,6 +8,7 @@
 #ifndef ROF_STATE_MACHINE_H
 #define ROF_STATE_MACHINE_H
 
+#include "rof_command.h"
 #include "rof_log.h"
 #include "rof_safety.h"
 #include "rof_status.h"
@@ -29,19 +30,6 @@ typedef struct {
     float reheat_band_c; /* HALTEN -> AUFHEIZEN unter Sollwert - reheat_band_c */
     float cooled_c;      /* ABKUEHLEN -> BEREIT unter cooled_c */
 } rof_fsm_config_t;
-
-/* Ergebnis eines Befehls. Bei Ablehnung bleibt der Zustand, und der Grund
- * wird gemeldet (SAF-09, E-022). */
-typedef enum {
-    ROF_CMD_OK = 0,
-    ROF_CMD_NO_SETPOINT,          /* Start ohne gesetzten Sollwert */
-    ROF_CMD_ALREADY_RUNNING,      /* Start während AUFHEIZEN oder HALTEN */
-    ROF_CMD_FAULT_ACTIVE,         /* Start in FEHLER */
-    ROF_CMD_SAFE_STATE,           /* Start in SICHERER_ZUSTAND */
-    ROF_CMD_SETPOINT_TOO_LOW,     /* Sollwert unter der Grenze */
-    ROF_CMD_SETPOINT_TOO_HIGH,    /* Sollwert über der Grenze */
-    ROF_CMD_SETPOINT_NOT_A_NUMBER /* Sollwert ist keine Zahl */
-} rof_cmd_result_t;
 
 /* Was der Regelzyklus dem Automaten je Zyklus übergibt. */
 typedef struct {
