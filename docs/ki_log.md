@@ -118,3 +118,26 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 - Plan für M4 ohne Änderungen freigegeben
 
 **Vom Nutzer geändert oder abgelehnt:** nichts. CI-Lauf #6 nach dem Push war grün.
+
+## 2026-11-01 – M5 Simulator und Regler
+
+**Modell:** Claude Opus 5.5
+
+**Von der KI erzeugt:**
+- Plan für M5 mit Rückfragen zu Ort der PWM, Rückmeldung von Befehlen und Simulator-/Abnahmewerten
+- Langsame PWM `core/control/rof_slow_pwm.c`, PI-Regler `core/control/rof_pi.c` (Werte nach SIMC), Regelzyklus `core/control/rof_controller.c` mit Befehlsprüfung, Begrenzung auf 4 Befehle je Zyklus und Snapshot, Befehle `core/include/rof_command.h`
+- Simulator `platform/host/sim_oven.{h,c}`, Befehlsqueue `platform/host/mock_command_queue.{h,c}`, Fehlereinspeisung im Mock-Ausgang
+- Tests: `test_slow_pwm`, `test_pi`, `test_sim_oven` (gegen die analytische Lösung), `test_controller`, `test_integration` mit 8 Szenarien über zusammen rund 35 simulierte Stunden, darunter der Entkopplungstest; Gegenprobe ohne Befehlsbegrenzung
+- Entscheidungen E-023 bis E-027, Glossar, Nachweise für CTL-01 bis CTL-03, CTL-06, SAF-01, SAF-02, SAF-13 und ARC-02 bis ARC-09 (Host-Teil)
+
+**Vom Nutzer entschieden:**
+- PWM als reine Funktion in core
+- Rückmeldung von Befehlen über den Snapshot; Claude hat ergänzt, dass die letzten 8 Ergebnisse gehalten werden
+- Simulator- und Abnahmewerte wie vorgeschlagen
+- Plan mit dem zusätzlichen Befehl „Offset setzen“ freigegeben, den Claude als über CLAUDE.md hinausgehend markiert hatte
+
+**Auffälligkeiten beim Umsetzen:**
+- Eine Test-Hilfsfunktion startete das Heizen direkt nach dem Zuordnen des Garraums. Der Start wurde abgelehnt, weil der Automat nach E-020 ohne Zuordnung in FEHLER stand. Korrigiert wurde der Test, nicht der Code.
+- Die Abnahmewerte wurden ohne Nachstellen erreicht; die gemessenen Werte stehen in E-024.
+
+**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M5 ergänzt.
