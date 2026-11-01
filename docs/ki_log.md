@@ -140,4 +140,4 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 - Eine Test-Hilfsfunktion startete das Heizen direkt nach dem Zuordnen des Garraums. Der Start wurde abgelehnt, weil der Automat nach E-020 ohne Zuordnung in FEHLER stand. Korrigiert wurde der Test, nicht der Code.
 - Die Abnahmewerte wurden ohne Nachstellen erreicht; die gemessenen Werte stehen in E-024.
 
-**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M5 ergänzt.
+**Vom Nutzer geändert oder abgelehnt:** nichts. CI-Lauf #7 nach dem Push war grün.
