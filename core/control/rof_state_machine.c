@@ -10,6 +10,26 @@ static bool config_is_valid(const rof_fsm_config_t *c)
     return c->hold_band_c > 0.0f && c->reheat_band_c > c->hold_band_c && c->cooled_c > 0.0f;
 }
 
+/* ---- Zustandswechsel ---------------------------------------------------- */
+
+static const char *const STATE_TEXT[] = {
+    [ROF_STATE_IDLE] = "Zustand: BEREIT",
+    [ROF_STATE_HEATING] = "Zustand: AUFHEIZEN",
+    [ROF_STATE_HOLDING] = "Zustand: HALTEN",
+    [ROF_STATE_COOLING] = "Zustand: ABKUEHLEN",
+    [ROF_STATE_FAULT] = "Zustand: FEHLER",
+    [ROF_STATE_SAFE_STATE] = "Zustand: SICHERER_ZUSTAND",
+};
+
+/* Jeder Zustandswechsel läuft hierüber und wird einmal geloggt. */
+static void enter(rof_fsm_t *fsm, rof_state_t next)
+{
+    if (next != fsm->state) {
+        fsm->state = next;
+        rof_log_write(fsm->logger, ROF_LOG_INFO, STATE_TEXT[next]);
+    }
+}
+
 /* ---- Öffentliche Funktionen --------------------------------------------- */
 
 rof_fsm_config_t rof_fsm_default_config(void)
@@ -61,4 +81,42 @@ bool rof_fsm_setpoint(const rof_fsm_t *fsm, float *setpoint_c)
     }
     *setpoint_c = fsm->setpoint_c;
     return true;
+}
+
+rof_cmd_result_t rof_fsm_set_setpoint(rof_fsm_t *fsm, const rof_safety_t *safety, float setpoint_c)
+{
+    switch (rof_safety_check_setpoint(safety, setpoint_c)) {
+    case ROF_SETPOINT_OK:
+        fsm->setpoint_c = setpoint_c;
+        fsm->has_setpoint = true;
+        return ROF_CMD_OK;
+    case ROF_SETPOINT_TOO_LOW:
+        return ROF_CMD_SETPOINT_TOO_LOW;
+    case ROF_SETPOINT_TOO_HIGH:
+        return ROF_CMD_SETPOINT_TOO_HIGH;
+    case ROF_SETPOINT_NOT_A_NUMBER:
+    default:
+        return ROF_CMD_SETPOINT_NOT_A_NUMBER;
+    }
+}
+
+rof_cmd_result_t rof_fsm_start(rof_fsm_t *fsm)
+{
+    switch (fsm->state) {
+    case ROF_STATE_IDLE:
+    case ROF_STATE_COOLING:
+        if (!fsm->has_setpoint) {
+            return ROF_CMD_NO_SETPOINT;
+        }
+        enter(fsm, ROF_STATE_HEATING); /* Ü1, Ü6 */
+        return ROF_CMD_OK;
+    case ROF_STATE_HEATING:
+    case ROF_STATE_HOLDING:
+        return ROF_CMD_ALREADY_RUNNING;
+    case ROF_STATE_FAULT:
+        return ROF_CMD_FAULT_ACTIVE;
+    case ROF_STATE_SAFE_STATE:
+    default:
+        return ROF_CMD_SAFE_STATE;
+    }
 }

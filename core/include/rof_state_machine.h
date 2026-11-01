@@ -9,6 +9,7 @@
 #define ROF_STATE_MACHINE_H
 
 #include "rof_log.h"
+#include "rof_safety.h"
 #include "rof_status.h"
 
 #include <stdbool.h>
@@ -28,6 +29,19 @@ typedef struct {
     float reheat_band_c; /* HALTEN -> AUFHEIZEN unter Sollwert - reheat_band_c */
     float cooled_c;      /* ABKUEHLEN -> BEREIT unter cooled_c */
 } rof_fsm_config_t;
+
+/* Ergebnis eines Befehls. Bei Ablehnung bleibt der Zustand, und der Grund
+ * wird gemeldet (SAF-09, E-022). */
+typedef enum {
+    ROF_CMD_OK = 0,
+    ROF_CMD_NO_SETPOINT,          /* Start ohne gesetzten Sollwert */
+    ROF_CMD_ALREADY_RUNNING,      /* Start während AUFHEIZEN oder HALTEN */
+    ROF_CMD_FAULT_ACTIVE,         /* Start in FEHLER */
+    ROF_CMD_SAFE_STATE,           /* Start in SICHERER_ZUSTAND */
+    ROF_CMD_SETPOINT_TOO_LOW,     /* Sollwert unter der Grenze */
+    ROF_CMD_SETPOINT_TOO_HIGH,    /* Sollwert über der Grenze */
+    ROF_CMD_SETPOINT_NOT_A_NUMBER /* Sollwert ist keine Zahl */
+} rof_cmd_result_t;
 
 typedef struct {
     rof_fsm_config_t config;
@@ -57,5 +71,14 @@ bool rof_fsm_roles_editable(const rof_fsm_t *fsm);
 /* Schreibt den Sollwert nach *setpoint_c und liefert true. Ohne gesetzten
  * Sollwert false, *setpoint_c bleibt unverändert. */
 bool rof_fsm_setpoint(const rof_fsm_t *fsm, float *setpoint_c);
+
+/* Befehl Sollwert setzen, in jedem Zustand erlaubt. Geprüft wird mit
+ * rof_safety_check_setpoint(); ein ungültiger Wert wird abgelehnt, nicht
+ * begrenzt, und der alte Sollwert bleibt (SAF-09). */
+rof_cmd_result_t rof_fsm_set_setpoint(rof_fsm_t *fsm, const rof_safety_t *safety, float setpoint_c);
+
+/* Befehl Start. Aus BEREIT oder ABKUEHLEN nach AUFHEIZEN, wenn ein
+ * Sollwert gesetzt ist. Sonst abgelehnt mit Grund. */
+rof_cmd_result_t rof_fsm_start(rof_fsm_t *fsm);
 
 #endif /* ROF_STATE_MACHINE_H */

@@ -5,13 +5,21 @@
  */
 #include "unity.h"
 
+#include "fake_clock.h"
 #include "mock_log.h"
 #include "rof_state_machine.h"
+
+#include <math.h>
 
 static mock_log_t log_mock;
 static rof_log_t logger_if;
 static rof_fsm_config_t config;
 static rof_fsm_t fsm;
+
+/* Nur für die Sollwertprüfung (SAF-09), die in der Sicherheitslogik liegt */
+static fake_clock_t clock_fake;
+static rof_clock_t clk_if;
+static rof_safety_t safety;
 
 void setUp(void)
 {
@@ -19,6 +27,11 @@ void setUp(void)
     logger_if = mock_log_interface(&log_mock);
     config = rof_fsm_default_config();
     TEST_ASSERT_EQUAL(ROF_OK, rof_fsm_init(&fsm, &config, &logger_if));
+
+    fake_clock_init(&clock_fake, 0);
+    clk_if = fake_clock_interface(&clock_fake);
+    rof_safety_config_t safety_config = rof_safety_default_config();
+    TEST_ASSERT_EQUAL(ROF_OK, rof_safety_init(&safety, &safety_config, &clk_if, &logger_if));
 }
 
 void tearDown(void) {}
@@ -70,6 +83,69 @@ static void test_init_rejects_missing_logger_and_bad_config(void)
     TEST_ASSERT_EQUAL(ROF_ERR_INVALID_ARG, rof_fsm_init(&other, &c, &logger_if));
 }
 
+/* ---- Sollwert und Start ------------------------------------------------- */
+
+#define SETPOINT_C 80.0f
+
+static void set_valid_setpoint(void)
+{
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, rof_fsm_set_setpoint(&fsm, &safety, SETPOINT_C));
+}
+
+/* SAF-09 */
+static void test_valid_setpoint_is_stored(void)
+{
+    float setpoint_c = 0.0f;
+
+    set_valid_setpoint();
+
+    TEST_ASSERT_TRUE(rof_fsm_setpoint(&fsm, &setpoint_c));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, SETPOINT_C, setpoint_c);
+}
+
+/* SAF-09: abgelehnt mit Grund, der alte Sollwert bleibt */
+static void test_invalid_setpoint_is_rejected_with_reason(void)
+{
+    float setpoint_c = 0.0f;
+    set_valid_setpoint();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_SETPOINT_TOO_LOW, rof_fsm_set_setpoint(&fsm, &safety, 19.0f));
+    TEST_ASSERT_EQUAL(ROF_CMD_SETPOINT_TOO_HIGH, rof_fsm_set_setpoint(&fsm, &safety, 111.0f));
+    TEST_ASSERT_EQUAL(ROF_CMD_SETPOINT_NOT_A_NUMBER, rof_fsm_set_setpoint(&fsm, &safety, NAN));
+
+    rof_fsm_setpoint(&fsm, &setpoint_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, SETPOINT_C, setpoint_c);
+}
+
+/* E-022: Start ohne Sollwert wird abgelehnt, der Zustand bleibt */
+static void test_start_without_setpoint_is_rejected(void)
+{
+    TEST_ASSERT_EQUAL(ROF_CMD_NO_SETPOINT, rof_fsm_start(&fsm));
+    TEST_ASSERT_EQUAL(ROF_STATE_IDLE, rof_fsm_state(&fsm));
+}
+
+/* Ü1: BEREIT + Start mit Sollwert -> AUFHEIZEN */
+static void test_u1_start_in_idle_begins_heating(void)
+{
+    set_valid_setpoint();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, rof_fsm_start(&fsm));
+
+    TEST_ASSERT_EQUAL(ROF_STATE_HEATING, rof_fsm_state(&fsm));
+    TEST_ASSERT_TRUE(rof_fsm_output_enabled(&fsm));
+    TEST_ASSERT_EQUAL_UINT(1, log_mock.count[ROF_LOG_INFO]);
+}
+
+/* Start während schon geheizt wird, ändert nichts */
+static void test_start_while_heating_is_rejected(void)
+{
+    set_valid_setpoint();
+    rof_fsm_start(&fsm);
+
+    TEST_ASSERT_EQUAL(ROF_CMD_ALREADY_RUNNING, rof_fsm_start(&fsm));
+    TEST_ASSERT_EQUAL(ROF_STATE_HEATING, rof_fsm_state(&fsm));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -77,6 +153,12 @@ int main(void)
     RUN_TEST(test_starts_idle_with_output_off_and_no_setpoint);
     RUN_TEST(test_default_config_has_agreed_values);
     RUN_TEST(test_init_rejects_missing_logger_and_bad_config);
+
+    RUN_TEST(test_valid_setpoint_is_stored);
+    RUN_TEST(test_invalid_setpoint_is_rejected_with_reason);
+    RUN_TEST(test_start_without_setpoint_is_rejected);
+    RUN_TEST(test_u1_start_in_idle_begins_heating);
+    RUN_TEST(test_start_while_heating_is_rejected);
 
     return UNITY_END();
 }
