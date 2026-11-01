@@ -286,3 +286,18 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
   - Die beiden Regeln ganz abschalten: Dann fielen auch echte Lücken bei anderen Pfaden nicht mehr auf.
   - Erfundene 4xx- oder 2xx-Antworten eintragen: Die Datei würde etwas beschreiben, das es nicht gibt.
   - Die neueste Version: Sie war erst zwei Tage alt. Eine Version mit gut zwei Wochen Abstand ist für eine feste Prüfung stabiler.
+
+## E-030 Eigener strenger JSON-Code in proto (M6)
+
+- **Kontext:** proto muss Anfragen lesen und Zustand schreiben, ohne malloc und so, dass jede Zeile erklärbar ist (API-04). Alle Anfragen der API sind flache Objekte wie `{"setpoint_c": 80}`.
+- **Entscheidung:**
+  - Vom Nutzer gewählt: ein eigener Leser nur für flache Objekte (`rof_json_parse_flat`). Er folgt der JSON-Grammatik, prüft Zahlen erst gegen die Grammatik und rechnet sie danach mit `strtof` um, das allein auch `+1`, `0x10` oder `NaN` annähme. Abgelehnt werden Verschachtelung, Arrays, Zeichen nach dem Objekt, doppelte Schlüssel, rohe Steuerzeichen, unbekannte Maskierungen und `\u` außerhalb von ASCII; ein Fühlertyp oder eine Rolle braucht nichts anderes.
+  - Vom Nutzer gewählt: Unbekannte Felder werden mit ihrem Namen abgelehnt. Nur die eigene Oberfläche spricht mit der API, ein Tippfehler im Feldnamen fällt so sofort auf.
+  - Feste Größen: höchstens 4 Felder, Schlüssel bis 24, Texte bis 32 Zeichen, Anfragen bis 256 Byte. Das Ergebnis steht in einem Struct des Aufrufers.
+  - Ein eigener Schreiber (`rof_json_writer_t`) schreibt in einen Puffer fester Größe, setzt Kommas selbst, maskiert Texte und schreibt `null` für NaN und unendlich. Nur eine Funktion schreibt in den Puffer, und sie prüft vorher den Platz.
+  - Temperaturen mit zwei Nachkommastellen, das ist feiner als ein Messschritt des DS18B20.
+  - proto linkt nur die Header von core. Die Include-Regel für proto erlaubt nur noch die Standard-Header, die es braucht (wie in E-010 angekündigt), darunter `stdio.h` für `snprintf` und `stdlib.h` für `strtof`. Dass proto kein malloc nutzt, prüft keine Maschine, sondern die Durchsicht des Codes.
+- **Verworfen:**
+  - cJSON: bequem, aber mit malloc bei jeder Anfrage.
+  - jsmn: bewährt und ohne malloc, aber fremder Code, und die Auswertung der Teile hätte trotzdem eigenen Code gebraucht.
+  - Unbekannte Felder still ignorieren: Tippfehler blieben unbemerkt.

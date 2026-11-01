@@ -97,3 +97,9 @@ In Prüfreihenfolge. Die erste Ursache, die auslöst, wird verriegelt.
 | Simulator | `sim_oven` (nur `platform/host`) |
 | Zeitkonstante, Totzeit | `tau_s`, `dead_s` |
 | Kern (Fühler im Fleisch) | `probe` |
+| Anfrage, Inhalt der Anfrage | request, `body` |
+| Ablehnung durch proto | `rof_proto_result_t` mit `ROF_PROTO_…` |
+| Vertragstest (proto gegen API-Beispiel) | `test_state_matches_api_example` |
+| Schreiber, Leser (JSON) | `rof_json_writer_t`, `rof_json_parse_flat()` |
+
+In der API (`docs/api.yaml`) stehen dieselben englischen Namen in Kleinbuchstaben, zum Beispiel `ROF_STATE_SAFE_STATE` als `"safe_state"` oder `ROF_ROLE_CHAMBER` als `"chamber"`.

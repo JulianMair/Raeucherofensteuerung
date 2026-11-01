@@ -2,7 +2,7 @@
 
 Steuerungssoftware für einen Räucherofen auf einem ESP32-S3. Prüfungsleistung im IU-Modul „Projekt: Software Development“. Getestet wird mit DS18B20-Sensoren und einer LED statt Heizelement, ohne Netzspannung.
 
-Stand: Meilenstein M5 (Simulator und Regler). Die vollständige Anleitung zu Bauen, Flashen und Testen folgt in M11.
+Stand: Meilenstein M6 (API). Die vollständige Anleitung zu Bauen, Flashen und Testen folgt in M11.
 
 ## Ordner
 
@@ -44,6 +44,12 @@ cmake --build build-cov
 cmake --build build-cov --target coverage
 ```
 
+Prüfung der API-Beschreibung (braucht Node.js):
+
+```bash
+npx --yes @redocly/cli@2.64.0 lint docs/api.yaml
+```
+
 Dieselben Schritte laufen in CI (`.github/workflows/ci.yml`) bei jedem Push. Lokal misst Apples `gcov` (LLVM), in CI misst GCC; maßgeblich ist CI.
 
 ## Dokumentation
@@ -51,7 +57,7 @@ Dieselben Schritte laufen in CI (`.github/workflows/ci.yml`) bei jedem Push. Lok
 - `docs/anforderungen.md`: alle Anforderungen mit ID und Nachweis
 - `docs/entscheidungen.md`: Entscheidungen mit verworfenen Alternativen
 - `docs/zustandsautomat.md`: Zustände und Übergänge
-- `docs/api.yaml`: OpenAPI-Beschreibung der Schnittstelle
+- `docs/api.yaml`: OpenAPI-Beschreibung der Schnittstelle, Beispiel für den Zustand in `docs/api-examples/state.json`
 - `docs/glossar.md`: deutsche Fachbegriffe und ihre englischen Namen im Code
 - `docs/ki_log.md`: Kennzeichnung der KI-Nutzung
 

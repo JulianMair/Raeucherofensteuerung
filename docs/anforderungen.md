@@ -15,7 +15,7 @@ Alle Anforderungen stammen aus `CLAUDE.md`. Jede hat eine feste ID aus Bereich u
 | ARC-07 | Der Zustand geht nur als Kopie eines Snapshot-Structs nach außen, geschützt durch Mutex. Der Webserver liest nur diese Kopie | M7 | teilweise: `rof_snapshot_t` ist eine vollständige Kopie ohne Zeiger in den Regelzyklus (`test_snapshot_*` in `test_controller`). Mutex und Webserver folgen in M7 und M8 |
 | ARC-08 | Der Regeltask hat die höchste Priorität der Anwendung | M7 | offen |
 | ARC-09 | Eine volle Queue, ein abgestürzter Webserver oder ein WLAN-Abbruch blockieren die Regelung nie | M5, M7 | teilweise: höchstens 4 Befehle je Zyklus (`test_at_most_four_commands_per_cycle`), Entkopplungstest auf dem Host (siehe SAF-13). Priorität des Regeltasks und WLAN-Abbruch folgen in M7 und M8 |
-| ARC-10 | proto ist reines C und auf dem Host testbar | M6 | offen |
+| ARC-10 | proto ist reines C und auf dem Host testbar | M6 | `proto/` ist reines C mit eigenen Tests auf dem Host (`test_json_reader`, `test_json_writer`, `test_proto`). Es linkt nur die Header von core (`rof_core_interfaces`), ein Aufruf von core-Logik scheitert beim Linken; Include-Regel für proto (`include_rules_detects_proto_esp`, `_proto_time`) |
 
 ## SAF – Sicherheitslogik (Abschnitt 2)
 
@@ -29,7 +29,7 @@ Alle Anforderungen stammen aus `CLAUDE.md`. Jede hat eine feste ID aus Bereich u
 | SAF-06 | Auslöser: Übertemperatur über einer harten Grenze, die nicht über die API änderbar ist | M3 | auslösen: `test_temperature_above_hard_limit_trips`, `test_hard_limit_ignores_wider_config`, `test_over_temperature_trips_with_output_off`; nicht auslösen: `test_temperature_at_hard_limit_does_not_trip`. Nicht über die API änderbar: Konstante `ROF_SAFETY_HARD_MAX_C`, kein Feld der Konfiguration (E-016) |
 | SAF-07 | Auslöser: Garraumsensor fehlt oder ist keinem Kanal zugeordnet | M3 | auslösen: `test_unassigned_chamber_trips`, `test_missing_chamber_trips`; nicht auslösen: `test_valid_chamber_does_not_trip`. Den Rollenstatus liefert die Sensorverwaltung (SEN-05). Ohne Heizen führt die Ursache zu FEHLER statt zur Verriegelung (E-020, `test_u7_fault_in_idle_blocks_start`) |
 | SAF-08 | Auslöser: Regelzyklus überschreitet sein Zeitfenster (Watchdog) | M3 | auslösen: `test_cycle_gap_over_window_trips`, `test_cycle_window_is_configurable`; nicht auslösen: `test_cycles_within_window_do_not_trip`, `test_first_cycle_has_no_window` |
-| SAF-09 | Sollwerte außerhalb der Grenzen werden abgelehnt, nicht begrenzt, und der Grund wird gemeldet | M3, M6 | teilweise: `test_setpoint_within_limits_is_ok`, `test_setpoint_outside_limits_is_rejected_with_reason`. Die Meldung des Grunds über die API folgt in M6 |
+| SAF-09 | Sollwerte außerhalb der Grenzen werden abgelehnt, nicht begrenzt, und der Grund wird gemeldet | M3, M5, M6 | `test_setpoint_within_limits_is_ok`, `test_setpoint_outside_limits_is_rejected_with_reason` (Sicherheitslogik); im Regelzyklus `test_invalid_setpoint_is_rejected_with_reason`; in proto `test_setpoint_outside_limits_is_rejected_with_reason` mit demselben Grund, über die API als `{"result": "setpoint_too_high"}` mit Status 422 (`test_rejection_encoding_and_status`) |
 | SAF-10 | Nach einem Neustart startet das System immer in `BEREIT` mit Ausgang 0. Die Heizung läuft erst nach erneutem Start | M4, M7 | teilweise: `test_starts_idle_with_output_off_and_no_setpoint`, `test_u10_successful_reset_returns_to_idle`, `test_start_without_setpoint_is_rejected`; `rof_controller_init` setzt den Ausgang ausdrücklich auf 0 (`test_init_turns_output_off_and_starts_idle`), Neustart mitten im Halten heizt nicht weiter (`test_restart_while_holding_does_not_resume_heating`). Neustart der Firmware folgt in M7 |
 | SAF-11 | Jede Regel hat mindestens einen Test für Auslösen und einen für Nichtauslösen | M3 | jede Regel SAF-03 bis SAF-08 hat Tests für Auslösen und Nichtauslösen, siehe dort |
 | SAF-12 | Zweigabdeckung von `core/safety` 100 Prozent, gemessen mit gcov in CI | M3 | CMake-Target `coverage` (gcovr, nur `core/safety`, Zeilen und Zweige 100 Prozent), CI-Schritt „Abdeckung core/safety“ (E-017) |
@@ -62,10 +62,10 @@ Alle Anforderungen stammen aus `CLAUDE.md`. Jede hat eine feste ID aus Bereich u
 
 | ID | Anforderung | Meilenstein | Nachweis |
 |---|---|---|---|
-| API-01 | `docs/api.yaml` (OpenAPI) ist die einzige Quelle für die Schnittstelle, die TypeScript-Typen werden daraus generiert (`openapi-typescript`) | M6, M9 | offen |
-| API-02 | REST für Befehle und Konfiguration | M6, M8 | offen |
-| API-03 | WebSocket `/ws` für Livewerte im Takt von 1 Sekunde | M6, M8 | offen |
-| API-04 | Kodierung und Validierung in `proto/`, Host-Tests mit Unity inklusive kaputtem JSON, fehlenden Feldern und Werten außerhalb der Grenzen | M6 | offen |
+| API-01 | `docs/api.yaml` (OpenAPI) ist die einzige Quelle für die Schnittstelle, die TypeScript-Typen werden daraus generiert (`openapi-typescript`) | M6, M9 | teilweise: `docs/api.yaml` (OpenAPI 3.1) beschreibt alle Endpunkte und den WebSocket; CI prüft sie mit Redocly `recommended-strict` (E-029). Vertragstest `test_state_matches_api_example`: proto erzeugt genau `docs/api-examples/state.json`. Die TypeScript-Typen folgen in M9 |
+| API-02 | REST für Befehle und Konfiguration | M6, M8 | teilweise: REST-Endpunkte in `docs/api.yaml`, Dekodieren aller Befehle in proto (`test_setpoint_is_decoded`, `test_start_stop_reset_accept_empty_body_or_empty_object`, `test_role_is_decoded`, `test_offset_is_decoded`), HTTP-Status je Ergebnis (`test_http_status_per_result`). Der HTTP-Server folgt in M8 |
+| API-03 | WebSocket `/ws` für Livewerte im Takt von 1 Sekunde | M6, M8 | teilweise: `/ws` in `docs/api.yaml` beschrieben, jede Nachricht ist derselbe Zustand wie `GET /api/state` (`rof_proto_encode_state`, `test_state_matches_api_example`). Der WebSocket-Server mit 1-s-Takt folgt in M8 |
+| API-04 | Kodierung und Validierung in `proto/`, Host-Tests mit Unity inklusive kaputtem JSON, fehlenden Feldern und Werten außerhalb der Grenzen | M6 | `test_json_reader` (kaputtes JSON aller Art), `test_proto`: `test_broken_json_is_bad_json`, `test_missing_field_is_named`, `test_wrong_type_is_named`, `test_unknown_field_is_named`, `test_setpoint_outside_limits_is_rejected_with_reason`, `test_offset_outside_limits_is_rejected`, `test_bad_sensor_id_is_rejected`, `test_too_large_body` |
 
 ## NET – Netzwerk (Abschnitt 6, Arbeitsweise 8)
 
