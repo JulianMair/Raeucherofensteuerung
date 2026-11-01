@@ -2,6 +2,7 @@
 # Linkt nur die Header von core, nicht dessen Logik: Ein Aufruf einer
 # core-Funktion aus proto scheitert schon beim Linken (ARC-04, E-030).
 add_library(rof_proto STATIC
+    rof_json_reader.c
     rof_json_writer.c
 )
 target_include_directories(rof_proto PUBLIC include)

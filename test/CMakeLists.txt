@@ -69,3 +69,7 @@ add_include_violation_test(net_platform  "firmware/net/bad.c:2: verbotenes Inclu
 add_executable(test_json_writer test_json_writer.c)
 target_link_libraries(test_json_writer PRIVATE unity rof_proto project_warnings)
 add_test(NAME json_writer COMMAND test_json_writer)
+
+add_executable(test_json_reader test_json_reader.c)
+target_link_libraries(test_json_reader PRIVATE unity rof_proto project_warnings)
+add_test(NAME json_reader COMMAND test_json_reader)
