@@ -117,4 +117,4 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 - Start ohne Sollwert wird abgelehnt
 - Plan für M4 ohne Änderungen freigegeben
 
-**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M4 ergänzt.
+**Vom Nutzer geändert oder abgelehnt:** nichts. CI-Lauf #6 nach dem Push war grün.
