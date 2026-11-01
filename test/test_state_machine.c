@@ -387,6 +387,148 @@ static void test_stop_in_fault_does_nothing(void)
     TEST_ASSERT_EQUAL(ROF_STATE_FAULT, rof_fsm_state(&fsm));
 }
 
+/* ---- SICHERER_ZUSTAND --------------------------------------------------- */
+
+/* Ein Regelzyklus mit verriegelter Sicherheitslogik */
+static void step_latched(rof_fault_t fault)
+{
+    rof_fsm_input_t in = { .latched = fault, .active = fault, .chamber_temp_c = 0.0f };
+    rof_fsm_step(&fsm, &in);
+}
+
+static void go_safe_state(void)
+{
+    go_heating();
+    step_latched(ROF_FAULT_CHAMBER_MISSING);
+    TEST_ASSERT_EQUAL(ROF_STATE_SAFE_STATE, rof_fsm_state(&fsm));
+}
+
+/* Ü9 aus BEREIT, z. B. Übertemperatur durch ein klemmendes Relais */
+static void test_u9_latch_in_idle_enters_safe_state(void)
+{
+    step_latched(ROF_FAULT_OVER_TEMPERATURE);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_SAFE_STATE, rof_fsm_state(&fsm));
+}
+
+/* Ü9 aus AUFHEIZEN */
+static void test_u9_latch_while_heating_enters_safe_state(void)
+{
+    go_heating();
+
+    step_latched(ROF_FAULT_CHAMBER_MISSING);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_SAFE_STATE, rof_fsm_state(&fsm));
+    TEST_ASSERT_FALSE(rof_fsm_output_enabled(&fsm));
+}
+
+/* Ü9 aus HALTEN */
+static void test_u9_latch_while_holding_enters_safe_state(void)
+{
+    go_holding();
+
+    step_latched(ROF_FAULT_FROZEN);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_SAFE_STATE, rof_fsm_state(&fsm));
+}
+
+/* Ü9 aus ABKUEHLEN */
+static void test_u9_latch_while_cooling_enters_safe_state(void)
+{
+    go_cooling();
+
+    step_latched(ROF_FAULT_OVER_TEMPERATURE);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_SAFE_STATE, rof_fsm_state(&fsm));
+}
+
+/* Ü9 aus FEHLER */
+static void test_u9_latch_in_fault_enters_safe_state(void)
+{
+    step_active(ROF_FAULT_CHAMBER_MISSING);
+
+    step_latched(ROF_FAULT_OVER_TEMPERATURE);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_SAFE_STATE, rof_fsm_state(&fsm));
+}
+
+/* SAF-02, Nichtübergang zu Ü10: verriegelt bleibt verriegelt, auch wenn die
+ * Ursache weg ist. Erst ein gelungener Reset hebt die Verriegelung auf. */
+static void test_safe_state_stays_while_latched(void)
+{
+    go_safe_state();
+
+    rof_fsm_input_t cause_gone = { .latched = ROF_FAULT_CHAMBER_MISSING, .active = ROF_FAULT_NONE, .chamber_temp_c = 60.0f };
+    rof_fsm_step(&fsm, &cause_gone);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_SAFE_STATE, rof_fsm_state(&fsm));
+}
+
+/* Ü10: SICHERER_ZUSTAND + Verriegelung aufgehoben -> BEREIT, nicht zurück ins Heizen */
+static void test_u10_successful_reset_returns_to_idle(void)
+{
+    go_safe_state();
+
+    step_ok(60.0f);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_IDLE, rof_fsm_state(&fsm));
+    TEST_ASSERT_FALSE(rof_fsm_output_enabled(&fsm));
+}
+
+/* Ü7 nach dem Reset: kommt die Ursache ohne Heizen gleich zurück, folgt FEHLER */
+static void test_u7_cause_returning_after_reset_is_a_fault(void)
+{
+    go_safe_state();
+
+    step_active(ROF_FAULT_CHAMBER_MISSING);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_FAULT, rof_fsm_state(&fsm));
+}
+
+static void test_start_in_safe_state_is_rejected(void)
+{
+    go_safe_state();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_SAFE_STATE, rof_fsm_start(&fsm));
+    TEST_ASSERT_EQUAL(ROF_STATE_SAFE_STATE, rof_fsm_state(&fsm));
+}
+
+static void test_stop_in_safe_state_does_nothing(void)
+{
+    go_safe_state();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, rof_fsm_stop(&fsm));
+    TEST_ASSERT_EQUAL(ROF_STATE_SAFE_STATE, rof_fsm_state(&fsm));
+}
+
+/* E-022: Ausgang nur in AUFHEIZEN und HALTEN, Rollen zuweisen nur ohne Heizen */
+static void test_output_and_roles_per_state(void)
+{
+    TEST_ASSERT_FALSE(rof_fsm_output_enabled(&fsm));
+    TEST_ASSERT_TRUE(rof_fsm_roles_editable(&fsm));
+
+    go_heating();
+    TEST_ASSERT_TRUE(rof_fsm_output_enabled(&fsm));
+    TEST_ASSERT_FALSE(rof_fsm_roles_editable(&fsm));
+
+    step_ok(SETPOINT_C);
+    TEST_ASSERT_EQUAL(ROF_STATE_HOLDING, rof_fsm_state(&fsm));
+    TEST_ASSERT_TRUE(rof_fsm_output_enabled(&fsm));
+    TEST_ASSERT_FALSE(rof_fsm_roles_editable(&fsm));
+
+    rof_fsm_stop(&fsm);
+    TEST_ASSERT_FALSE(rof_fsm_output_enabled(&fsm));
+    TEST_ASSERT_TRUE(rof_fsm_roles_editable(&fsm));
+
+    step_active(ROF_FAULT_CHAMBER_MISSING);
+    TEST_ASSERT_FALSE(rof_fsm_output_enabled(&fsm));
+    TEST_ASSERT_TRUE(rof_fsm_roles_editable(&fsm));
+
+    step_latched(ROF_FAULT_OVER_TEMPERATURE);
+    TEST_ASSERT_FALSE(rof_fsm_output_enabled(&fsm));
+    TEST_ASSERT_TRUE(rof_fsm_roles_editable(&fsm));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -422,6 +564,18 @@ int main(void)
     RUN_TEST(test_fault_stays_while_cause_is_active);
     RUN_TEST(test_u8_fault_clears_to_idle);
     RUN_TEST(test_stop_in_fault_does_nothing);
+
+    RUN_TEST(test_u9_latch_in_idle_enters_safe_state);
+    RUN_TEST(test_u9_latch_while_heating_enters_safe_state);
+    RUN_TEST(test_u9_latch_while_holding_enters_safe_state);
+    RUN_TEST(test_u9_latch_while_cooling_enters_safe_state);
+    RUN_TEST(test_u9_latch_in_fault_enters_safe_state);
+    RUN_TEST(test_safe_state_stays_while_latched);
+    RUN_TEST(test_u10_successful_reset_returns_to_idle);
+    RUN_TEST(test_u7_cause_returning_after_reset_is_a_fault);
+    RUN_TEST(test_start_in_safe_state_is_rejected);
+    RUN_TEST(test_stop_in_safe_state_does_nothing);
+    RUN_TEST(test_output_and_roles_per_state);
 
     return UNITY_END();
 }

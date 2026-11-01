@@ -53,6 +53,8 @@ static rof_state_t next_regular_state(const rof_fsm_t *fsm, float chamber_c)
         return ROF_STATE_COOLING;
     case ROF_STATE_FAULT:
         return ROF_STATE_IDLE; /* Ü8: keine Ursache mehr aktiv */
+    case ROF_STATE_SAFE_STATE:
+        return ROF_STATE_IDLE; /* Ü10: Reset gelungen, nie direkt zurück ins Heizen */
     default:
         return fsm->state;
     }
@@ -157,8 +159,15 @@ rof_cmd_result_t rof_fsm_stop(rof_fsm_t *fsm)
     return ROF_CMD_OK;
 }
 
+/* Reihenfolge: verriegelt vor aktiv vor Normalbetrieb. So gewinnt immer
+ * der strengere Zustand. */
 void rof_fsm_step(rof_fsm_t *fsm, const rof_fsm_input_t *input)
 {
+    if (input->latched != ROF_FAULT_NONE) {
+        /* Ü9: aus jedem Zustand. Raus nur über einen gelungenen Reset (Ü10). */
+        enter(fsm, ROF_STATE_SAFE_STATE);
+        return;
+    }
     if (input->active != ROF_FAULT_NONE) {
         /* Ü7: Ursache aktiv, aber nicht verriegelt. Ohne gültigen Garraumwert
          * gibt es keinen Normalbetrieb, also FEHLER mit Ausgang aus. */
