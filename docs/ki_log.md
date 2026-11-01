@@ -141,3 +141,29 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 - Die Abnahmewerte wurden ohne Nachstellen erreicht; die gemessenen Werte stehen in E-024.
 
 **Vom Nutzer geändert oder abgelehnt:** nichts. CI-Lauf #7 nach dem Push war grün.
+
+## 2026-11-01 – M6 API
+
+**Modell:** Claude Opus 5.5
+
+**Von der KI erzeugt:**
+- Plan für M6 mit Rückfragen zu JSON-Parser, unbekannten Feldern und OpenAPI-Prüfung
+- `docs/api.yaml` (OpenAPI 3.1) mit allen Endpunkten, dem WebSocket und Beispielen; `docs/api-examples/state.json`
+- CI-Schritt „OpenAPI prüfen“ mit Redocly 2.64.0, `redocly.yaml` (`recommended-strict`) und `.redocly.lint-ignore.yaml` mit drei begründeten Ausnahmen
+- proto: JSON-Schreiber, strenger Leser für flache Objekte, Dekodieren der Anfragen, Kodieren von Zustand, Grenzen und Antworten, Namen der API, HTTP-Status
+- Grenzen im Snapshot (core)
+- Tests: `test_json_writer`, `test_json_reader`, `test_proto` mit Vertragstest gegen `docs/api-examples/state.json`; Gegenproben für Parser und Vertragstest
+- strengere Include-Regel für proto mit neuer Gegenprobe
+- Entscheidungen E-028 bis E-030, Glossar, Nachweise für API-01 bis API-04, ARC-10, SAF-09
+
+**Vom Nutzer entschieden:**
+- eigener kleiner JSON-Parser
+- unbekannte Felder ablehnen
+- OpenAPI-Prüfung in CI schon ab M6
+- Plan für M6 ohne Änderungen freigegeben
+
+**Auffälligkeiten beim Umsetzen:**
+- Redocly meldete drei Warnungen, die zur API nicht passen (kein 4xx bei reinem Lesen, 101 beim WebSocket). Statt die Regeln abzuschalten, sind genau diese drei Stellen mit Begründung ausgenommen (E-029). Claude hatte im Plan angekündigt, Warnungen zu beheben statt abzuschalten; hier wäre „beheben“ ein erfundener Antwortstatus gewesen.
+- Eine erste Gegenprobe zum Vertragstest griff nicht, weil `sed` unter macOS die Adresse `0,/…/` nicht kennt; mit Python wiederholt, danach griff sie.
+
+**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M6 ergänzt.
