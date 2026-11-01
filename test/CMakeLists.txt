@@ -28,6 +28,10 @@ add_executable(test_pi test_pi.c)
 target_link_libraries(test_pi PRIVATE unity rof_core project_warnings)
 add_test(NAME pi COMMAND test_pi)
 
+add_executable(test_sim_oven test_sim_oven.c)
+target_link_libraries(test_sim_oven PRIVATE unity host_sim project_warnings m)
+add_test(NAME sim_oven COMMAND test_sim_oven)
+
 # Include-Regeln (CI-02): Prüfung des echten Projekts plus Gegenproben.
 # Jede Gegenprobe ist ein kleiner Ordner mit einem absichtlichen Verstoß.
 # Sie besteht nur, wenn genau die erwartete Meldung erscheint.
