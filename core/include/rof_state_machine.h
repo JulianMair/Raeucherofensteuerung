@@ -43,6 +43,13 @@ typedef enum {
     ROF_CMD_SETPOINT_NOT_A_NUMBER /* Sollwert ist keine Zahl */
 } rof_cmd_result_t;
 
+/* Was der Regelzyklus dem Automaten je Zyklus übergibt. */
+typedef struct {
+    rof_fault_t latched;  /* rof_safety_fault(): verriegelte Ursache */
+    rof_fault_t active;   /* rof_safety_active(): Ursache in diesem Zyklus */
+    float chamber_temp_c; /* Garraumwert, nur gültig bei active == ROF_FAULT_NONE */
+} rof_fsm_input_t;
+
 typedef struct {
     rof_fsm_config_t config;
     const rof_log_t *logger;
@@ -80,5 +87,9 @@ rof_cmd_result_t rof_fsm_set_setpoint(rof_fsm_t *fsm, const rof_safety_t *safety
 /* Befehl Start. Aus BEREIT oder ABKUEHLEN nach AUFHEIZEN, wenn ein
  * Sollwert gesetzt ist. Sonst abgelehnt mit Grund. */
 rof_cmd_result_t rof_fsm_start(rof_fsm_t *fsm);
+
+/* Ein Regelzyklus: wechselt den Zustand nach der Übergangstabelle in
+ * docs/zustandsautomat.md. Aufrufen nach der Sicherheitslogik und vor dem Regler. */
+void rof_fsm_step(rof_fsm_t *fsm, const rof_fsm_input_t *input);
 
 #endif /* ROF_STATE_MACHINE_H */

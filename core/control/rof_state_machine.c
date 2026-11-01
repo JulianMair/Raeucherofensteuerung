@@ -30,6 +30,27 @@ static void enter(rof_fsm_t *fsm, rof_state_t next)
     }
 }
 
+/* Übergänge im Normalbetrieb, also ohne Fehler. In AUFHEIZEN und HALTEN
+ * ist immer ein Sollwert gesetzt, denn ohne ihn gibt es keinen Start. */
+static rof_state_t next_regular_state(const rof_fsm_t *fsm, float chamber_c)
+{
+    const rof_fsm_config_t *c = &fsm->config;
+    switch (fsm->state) {
+    case ROF_STATE_HEATING:
+        if (chamber_c >= fsm->setpoint_c - c->hold_band_c) {
+            return ROF_STATE_HOLDING; /* Ü2 */
+        }
+        return ROF_STATE_HEATING;
+    case ROF_STATE_HOLDING:
+        if (chamber_c < fsm->setpoint_c - c->reheat_band_c) {
+            return ROF_STATE_HEATING; /* Ü3 */
+        }
+        return ROF_STATE_HOLDING;
+    default:
+        return fsm->state;
+    }
+}
+
 /* ---- Öffentliche Funktionen --------------------------------------------- */
 
 rof_fsm_config_t rof_fsm_default_config(void)
@@ -119,4 +140,9 @@ rof_cmd_result_t rof_fsm_start(rof_fsm_t *fsm)
     default:
         return ROF_CMD_SAFE_STATE;
     }
+}
+
+void rof_fsm_step(rof_fsm_t *fsm, const rof_fsm_input_t *input)
+{
+    enter(fsm, next_regular_state(fsm, input->chamber_temp_c));
 }

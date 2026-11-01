@@ -146,6 +146,94 @@ static void test_start_while_heating_is_rejected(void)
     TEST_ASSERT_EQUAL(ROF_STATE_HEATING, rof_fsm_state(&fsm));
 }
 
+/* ---- Aufheizen und Halten ----------------------------------------------- */
+
+/* Ein Regelzyklus ohne Fehler mit diesem Garraumwert */
+static void step_ok(float chamber_c)
+{
+    rof_fsm_input_t in = {
+        .latched = ROF_FAULT_NONE,
+        .active = ROF_FAULT_NONE,
+        .chamber_temp_c = chamber_c,
+    };
+    rof_fsm_step(&fsm, &in);
+}
+
+static void go_heating(void)
+{
+    set_valid_setpoint();
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, rof_fsm_start(&fsm));
+}
+
+static void go_holding(void)
+{
+    go_heating();
+    step_ok(SETPOINT_C - 2.0f);
+    TEST_ASSERT_EQUAL(ROF_STATE_HOLDING, rof_fsm_state(&fsm));
+}
+
+/* Nichtübergang zu Ü2: knapp unter Sollwert - 2 °C bleibt AUFHEIZEN */
+static void test_heating_stays_below_hold_band(void)
+{
+    go_heating();
+
+    step_ok(SETPOINT_C - 2.1f);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_HEATING, rof_fsm_state(&fsm));
+}
+
+/* Ü2: AUFHEIZEN + Garraum >= Sollwert - 2 °C -> HALTEN */
+static void test_u2_heating_reaches_hold_band(void)
+{
+    go_heating();
+
+    step_ok(SETPOINT_C - 2.0f);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_HOLDING, rof_fsm_state(&fsm));
+    TEST_ASSERT_TRUE(rof_fsm_output_enabled(&fsm));
+}
+
+/* Nichtübergang zu Ü3: genau Sollwert - 10 °C bleibt HALTEN */
+static void test_holding_stays_at_reheat_band(void)
+{
+    go_holding();
+
+    step_ok(SETPOINT_C - 10.0f);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_HOLDING, rof_fsm_state(&fsm));
+}
+
+/* Ü3: HALTEN + Garraum < Sollwert - 10 °C -> AUFHEIZEN, z. B. Tür offen */
+static void test_u3_holding_falls_below_reheat_band(void)
+{
+    go_holding();
+
+    step_ok(SETPOINT_C - 10.1f);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_HEATING, rof_fsm_state(&fsm));
+}
+
+/* Ü3: ein deutlich erhöhter Sollwert führt ebenfalls zurück nach AUFHEIZEN */
+static void test_u3_raised_setpoint_returns_to_heating(void)
+{
+    go_holding();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, rof_fsm_set_setpoint(&fsm, &safety, SETPOINT_C + 20.0f));
+    step_ok(SETPOINT_C - 2.0f);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_HEATING, rof_fsm_state(&fsm));
+}
+
+/* BEREIT hat ohne Befehl keinen Übergang, egal wie warm es ist */
+static void test_idle_stays_idle_without_command(void)
+{
+    set_valid_setpoint();
+
+    step_ok(SETPOINT_C);
+
+    TEST_ASSERT_EQUAL(ROF_STATE_IDLE, rof_fsm_state(&fsm));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -159,6 +247,13 @@ int main(void)
     RUN_TEST(test_start_without_setpoint_is_rejected);
     RUN_TEST(test_u1_start_in_idle_begins_heating);
     RUN_TEST(test_start_while_heating_is_rejected);
+
+    RUN_TEST(test_heating_stays_below_hold_band);
+    RUN_TEST(test_u2_heating_reaches_hold_band);
+    RUN_TEST(test_holding_stays_at_reheat_band);
+    RUN_TEST(test_u3_holding_falls_below_reheat_band);
+    RUN_TEST(test_u3_raised_setpoint_returns_to_heating);
+    RUN_TEST(test_idle_stays_idle_without_command);
 
     return UNITY_END();
 }
