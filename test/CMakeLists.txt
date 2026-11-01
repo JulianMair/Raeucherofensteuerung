@@ -24,6 +24,10 @@ add_executable(test_slow_pwm test_slow_pwm.c)
 target_link_libraries(test_slow_pwm PRIVATE unity rof_core project_warnings)
 add_test(NAME slow_pwm COMMAND test_slow_pwm)
 
+add_executable(test_pi test_pi.c)
+target_link_libraries(test_pi PRIVATE unity rof_core project_warnings)
+add_test(NAME pi COMMAND test_pi)
+
 # Include-Regeln (CI-02): Prüfung des echten Projekts plus Gegenproben.
 # Jede Gegenprobe ist ein kleiner Ordner mit einem absichtlichen Verstoß.
 # Sie besteht nur, wenn genau die erwartete Meldung erscheint.
