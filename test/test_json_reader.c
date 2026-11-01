@@ -22,6 +22,15 @@ static rof_json_status_t parse(const char *text)
     return rof_json_parse_flat(text, strlen(text), &obj);
 }
 
+/* Feld, das es geben muss. Die Prüfung steht hier und nicht im Test, weil
+ * cppcheck nicht weiß, dass Unity bei einem Fehlschlag den Test verlässt. */
+static const rof_json_field_t *field(const char *key)
+{
+    const rof_json_field_t *f = rof_json_find(&obj, key);
+    TEST_ASSERT_NOT_NULL_MESSAGE(f, key);
+    return f;
+}
+
 /* ---- Gültige Objekte ---------------------------------------------------- */
 
 static void test_empty_object(void)
@@ -34,8 +43,7 @@ static void test_number_field(void)
 {
     TEST_ASSERT_EQUAL(ROF_JSON_OK, parse("{\"setpoint_c\":80}"));
     TEST_ASSERT_EQUAL_size_t(1, obj.count);
-    const rof_json_field_t *f = rof_json_find(&obj, "setpoint_c");
-    TEST_ASSERT_NOT_NULL(f);
+    const rof_json_field_t *f = field("setpoint_c");
     TEST_ASSERT_EQUAL(ROF_JSON_NUMBER, f->type);
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 80.0f, f->number);
 }
@@ -45,25 +53,25 @@ static void test_whitespace_and_several_fields(void)
 {
     TEST_ASSERT_EQUAL(ROF_JSON_OK, parse(" {\n\t\"a\" : -1.5e1 , \"b\":\"x\",\"c\" :true, \"d\": null } \r\n"));
     TEST_ASSERT_EQUAL_size_t(4, obj.count);
-    TEST_ASSERT_FLOAT_WITHIN(0.0001f, -15.0f, rof_json_find(&obj, "a")->number);
-    TEST_ASSERT_EQUAL_STRING("x", rof_json_find(&obj, "b")->string);
-    TEST_ASSERT_EQUAL(ROF_JSON_TRUE, rof_json_find(&obj, "c")->type);
-    TEST_ASSERT_EQUAL(ROF_JSON_NULL, rof_json_find(&obj, "d")->type);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, -15.0f, field("a")->number);
+    TEST_ASSERT_EQUAL_STRING("x", field("b")->string);
+    TEST_ASSERT_EQUAL(ROF_JSON_TRUE, field("c")->type);
+    TEST_ASSERT_EQUAL(ROF_JSON_NULL, field("d")->type);
 }
 
 static void test_false_and_number_forms(void)
 {
     TEST_ASSERT_EQUAL(ROF_JSON_OK, parse("{\"f\":false,\"z\":0,\"m\":-0.25,\"e\":2E+2}"));
-    TEST_ASSERT_EQUAL(ROF_JSON_FALSE, rof_json_find(&obj, "f")->type);
-    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, rof_json_find(&obj, "z")->number);
-    TEST_ASSERT_FLOAT_WITHIN(0.0001f, -0.25f, rof_json_find(&obj, "m")->number);
-    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 200.0f, rof_json_find(&obj, "e")->number);
+    TEST_ASSERT_EQUAL(ROF_JSON_FALSE, field("f")->type);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, field("z")->number);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, -0.25f, field("m")->number);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 200.0f, field("e")->number);
 }
 
 static void test_string_escapes(void)
 {
     TEST_ASSERT_EQUAL(ROF_JSON_OK, parse("{\"s\":\"a\\\"b\\\\c\\/d\\n\\u0041\"}"));
-    TEST_ASSERT_EQUAL_STRING("a\"b\\c/d\nA", rof_json_find(&obj, "s")->string);
+    TEST_ASSERT_EQUAL_STRING("a\"b\\c/d\nA", field("s")->string);
 }
 
 /* Nur len Zeichen zählen, der Text muss nicht mit 0 enden */

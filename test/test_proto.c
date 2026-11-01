@@ -293,11 +293,19 @@ static rof_snapshot_t example_snapshot(void)
     return s;
 }
 
-/* Liest das Beispiel aus docs und entfernt Leerraum außerhalb von Texten */
-static void read_example_minified(char *dst, size_t size)
+/* Öffnet das Beispiel. Die Prüfung steht hier und nicht beim Lesen, weil
+ * cppcheck nicht weiß, dass Unity bei einem Fehlschlag den Test verlässt. */
+static FILE *open_example(void)
 {
     FILE *f = fopen(ROF_API_EXAMPLE_STATE, "r");
     TEST_ASSERT_NOT_NULL_MESSAGE(f, ROF_API_EXAMPLE_STATE);
+    return f;
+}
+
+/* Liest das Beispiel aus docs und entfernt Leerraum außerhalb von Texten */
+static void read_example_minified(char *dst, size_t size)
+{
+    FILE *f = open_example();
     size_t n = 0;
     bool in_string = false;
     int ch;
