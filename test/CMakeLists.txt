@@ -65,3 +65,7 @@ add_include_violation_test(core_time     "core/bad.c:2: verbotenes Include time.
 add_include_violation_test(proto_esp     "proto/bad.c:2: verbotenes Include esp_err.h")
 add_include_violation_test(net_driver    "firmware/net/bad.c:2: verbotenes Include driver/gpio.h")
 add_include_violation_test(net_platform  "firmware/net/bad.c:2: verbotenes Include ds18b20.h")
+
+add_executable(test_json_writer test_json_writer.c)
+target_link_libraries(test_json_writer PRIVATE unity rof_proto project_warnings)
+add_test(NAME json_writer COMMAND test_json_writer)
