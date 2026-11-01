@@ -77,3 +77,6 @@ add_test(NAME json_reader COMMAND test_json_reader)
 add_executable(test_proto test_proto.c)
 target_link_libraries(test_proto PRIVATE unity rof_proto project_warnings)
 add_test(NAME proto COMMAND test_proto)
+# Vertragstest: proto muss genau das Beispiel aus docs/api-examples erzeugen
+target_compile_definitions(test_proto PRIVATE
+    ROF_API_EXAMPLE_STATE="${PROJECT_SOURCE_DIR}/docs/api-examples/state.json")

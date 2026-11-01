@@ -7,6 +7,7 @@
 
 #include "rof_proto.h"
 
+#include <stdio.h>
 #include <string.h>
 
 static rof_command_t cmd;
@@ -256,6 +257,197 @@ static void test_values_outside_lists_are_unknown(void)
     TEST_ASSERT_EQUAL_STRING("unknown", rof_proto_result_name((rof_cmd_result_t)99));
 }
 
+/* ---- Kodieren ----------------------------------------------------------- */
+
+static char out[ROF_PROTO_STATE_JSON_MAX];
+static size_t out_len;
+
+/* Derselbe Zustand wie in docs/api-examples/state.json */
+static rof_snapshot_t example_snapshot(void)
+{
+    rof_snapshot_t s;
+    memset(&s, 0, sizeof(s));
+    s.time_ms = 3600000;
+    s.limits = limits;
+    s.state = ROF_STATE_HOLDING;
+    s.has_setpoint = true;
+    s.setpoint_c = 80.0f;
+    s.duty = 0.46f;
+    s.latched_fault = ROF_FAULT_NONE;
+    s.active_fault = ROF_FAULT_NONE;
+    s.roles[ROF_ROLE_CHAMBER] = (rof_role_snapshot_t){ ROF_ROLE_STATUS_OK, 79.94f };
+    s.roles[ROF_ROLE_PROBE_1] = (rof_role_snapshot_t){ ROF_ROLE_STATUS_OK, 61.5f };
+    s.roles[ROF_ROLE_PROBE_2] = (rof_role_snapshot_t){ ROF_ROLE_STATUS_UNASSIGNED, 0.0f };
+    s.roles[ROF_ROLE_SMOKE_GEN] = (rof_role_snapshot_t){ ROF_ROLE_STATUS_MISSING, 0.0f };
+    s.channel_count = 3;
+    s.channels[0] = (rof_channel_snapshot_t){ 0x28AA000000000001ULL, "DS18B20", ROF_ROLE_CHAMBER, 0.0f,
+                                              true, false, ROF_OK, 79.94f };
+    s.channels[1] = (rof_channel_snapshot_t){ 0x28BB000000000002ULL, "DS18B20", ROF_ROLE_PROBE_1, -0.5f,
+                                              true, false, ROF_OK, 61.5f };
+    s.channels[2] = (rof_channel_snapshot_t){ 0x28CC000000000003ULL, "DS18B20", ROF_ROLE_SMOKE_GEN, 0.0f,
+                                              false, false, ROF_ERR_NOT_FOUND, 55.0f };
+    s.sensor_overflow = false;
+    s.recent_count = 2;
+    s.recent[0] = (rof_command_record_t){ 12, ROF_COMMAND_SET_SETPOINT, ROF_CMD_OK };
+    s.recent[1] = (rof_command_record_t){ 11, ROF_COMMAND_START, ROF_CMD_NO_SETPOINT };
+    return s;
+}
+
+/* Liest das Beispiel aus docs und entfernt Leerraum außerhalb von Texten */
+static void read_example_minified(char *dst, size_t size)
+{
+    FILE *f = fopen(ROF_API_EXAMPLE_STATE, "r");
+    TEST_ASSERT_NOT_NULL_MESSAGE(f, ROF_API_EXAMPLE_STATE);
+    size_t n = 0;
+    bool in_string = false;
+    int ch;
+    while ((ch = fgetc(f)) != EOF && n + 1 < size) {
+        if (ch == '"') {
+            in_string = !in_string;
+        }
+        if (!in_string && (ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t')) {
+            continue;
+        }
+        dst[n++] = (char)ch;
+    }
+    dst[n] = '\0';
+    fclose(f);
+}
+
+/* API-01, API-03, E-028: proto erzeugt genau das Beispiel aus docs/api-examples */
+static void test_state_matches_api_example(void)
+{
+    static char expected[ROF_PROTO_STATE_JSON_MAX];
+    read_example_minified(expected, sizeof(expected));
+    rof_snapshot_t s = example_snapshot();
+
+    TEST_ASSERT_TRUE(rof_proto_encode_state(&s, out, sizeof(out), &out_len));
+
+    TEST_ASSERT_EQUAL_STRING(expected, out);
+    TEST_ASSERT_EQUAL_size_t(strlen(expected), out_len);
+}
+
+/* Ohne Sollwert steht null, nicht 0 */
+static void test_state_without_setpoint_is_null(void)
+{
+    rof_snapshot_t s = example_snapshot();
+    s.has_setpoint = false;
+
+    TEST_ASSERT_TRUE(rof_proto_encode_state(&s, out, sizeof(out), &out_len));
+
+    TEST_ASSERT_NOT_NULL(strstr(out, "\"setpoint_c\":null"));
+}
+
+/* Ein doppelter Kanal hat keinen gültigen Wert */
+static void test_duplicate_channel_temperature_is_null(void)
+{
+    rof_snapshot_t s = example_snapshot();
+    s.channel_count = 1;
+    s.channels[0].duplicate = true;
+
+    TEST_ASSERT_TRUE(rof_proto_encode_state(&s, out, sizeof(out), &out_len));
+
+    TEST_ASSERT_NOT_NULL(strstr(out, "\"duplicate\":true,\"read_status\":\"ok\",\"temp_c\":null"));
+}
+
+/* Der größte mögliche Zustand passt in ROF_PROTO_STATE_JSON_MAX */
+static void test_largest_state_fits(void)
+{
+    rof_snapshot_t s = example_snapshot();
+    s.time_ms = UINT64_MAX;
+    s.channel_count = ROF_SENSOR_CHANNELS_MAX;
+    for (size_t i = 0; i < ROF_SENSOR_CHANNELS_MAX; i++) {
+        s.channels[i] = (rof_channel_snapshot_t){ UINT64_MAX, "SENSORTYPE_LONGNAME", ROF_ROLE_SMOKE_GEN,
+                                                  -5.0f, true, true, ROF_ERR_IO, -100.0f };
+    }
+    s.recent_count = ROF_CONTROLLER_RECENT_RESULTS;
+    for (size_t i = 0; i < ROF_CONTROLLER_RECENT_RESULTS; i++) {
+        s.recent[i] = (rof_command_record_t){ UINT32_MAX, ROF_COMMAND_SET_SETPOINT, ROF_CMD_SETPOINT_NOT_A_NUMBER };
+    }
+
+    TEST_ASSERT_TRUE(rof_proto_encode_state(&s, out, sizeof(out), &out_len));
+}
+
+static void test_state_reports_too_small_buffer(void)
+{
+    rof_snapshot_t s = example_snapshot();
+    char small[64];
+
+    TEST_ASSERT_FALSE(rof_proto_encode_state(&s, small, sizeof(small), &out_len));
+}
+
+/* GET /api/config, wie das Beispiel in docs/api.yaml */
+static void test_limits_encoding(void)
+{
+    TEST_ASSERT_TRUE(rof_proto_encode_limits(&limits, out, sizeof(out), &out_len));
+    TEST_ASSERT_EQUAL_STRING(
+        "{\"setpoint_min_c\":20.00,\"setpoint_max_c\":110.00,\"offset_max_c\":5.00,\"hard_max_c\":120.00}", out);
+}
+
+static void test_command_response_encoding(void)
+{
+    TEST_ASSERT_TRUE(rof_proto_encode_command_response(12, ROF_CMD_OK, out, sizeof(out), &out_len));
+    TEST_ASSERT_EQUAL_STRING("{\"seq\":12,\"result\":\"ok\"}", out);
+}
+
+/* Abgelehnt von proto: Wert außerhalb ergibt 422 mit Grund, sonst 400 oder 413 mit Fehler */
+static void test_rejection_encoding_and_status(void)
+{
+    rof_proto_result_t r = setpoint("{\"setpoint_c\": 200}");
+    TEST_ASSERT_EQUAL_INT(422, rof_proto_rejection_http_status(&r));
+    TEST_ASSERT_TRUE(rof_proto_encode_rejection(&r, out, sizeof(out), &out_len));
+    TEST_ASSERT_EQUAL_STRING("{\"result\":\"setpoint_too_high\"}", out);
+
+    r = setpoint("{\"setpoint_c\": 80, \"foo\": 1}");
+    TEST_ASSERT_EQUAL_INT(400, rof_proto_rejection_http_status(&r));
+    rof_proto_encode_rejection(&r, out, sizeof(out), &out_len);
+    TEST_ASSERT_EQUAL_STRING("{\"error\":\"unknown_field\",\"field\":\"foo\"}", out);
+
+    r = setpoint("{");
+    rof_proto_encode_rejection(&r, out, sizeof(out), &out_len);
+    TEST_ASSERT_EQUAL_STRING("{\"error\":\"bad_json\"}", out);
+
+    r = role("xyz", "{\"role\":\"chamber\"}");
+    rof_proto_encode_rejection(&r, out, sizeof(out), &out_len);
+    TEST_ASSERT_EQUAL_STRING("{\"error\":\"bad_sensor_id\",\"field\":\"id\"}", out);
+
+    char big[ROF_PROTO_MAX_BODY + 10];
+    memset(big, ' ', sizeof(big));
+    r = rof_proto_decode_setpoint(big, sizeof(big), &limits, &cmd);
+    TEST_ASSERT_EQUAL_INT(413, rof_proto_rejection_http_status(&r));
+    rof_proto_encode_rejection(&r, out, sizeof(out), &out_len);
+    TEST_ASSERT_EQUAL_STRING("{\"error\":\"too_large\"}", out);
+}
+
+/* Fehler des Webservers selbst: Queue voll, keine Antwort, kein Snapshot */
+static void test_server_error_encoding(void)
+{
+    TEST_ASSERT_TRUE(rof_proto_encode_error("busy", false, 0, out, sizeof(out), &out_len));
+    TEST_ASSERT_EQUAL_STRING("{\"error\":\"busy\"}", out);
+    TEST_ASSERT_TRUE(rof_proto_encode_error("timeout", true, 15, out, sizeof(out), &out_len));
+    TEST_ASSERT_EQUAL_STRING("{\"error\":\"timeout\",\"seq\":15}", out);
+}
+
+/* E-028: HTTP-Status je Ergebnis des Regeltasks */
+static void test_http_status_per_result(void)
+{
+    TEST_ASSERT_EQUAL_INT(200, rof_proto_http_status(ROF_CMD_OK));
+    const rof_cmd_result_t conflicts[] = { ROF_CMD_NO_SETPOINT, ROF_CMD_ALREADY_RUNNING, ROF_CMD_FAULT_ACTIVE,
+                                           ROF_CMD_SAFE_STATE, ROF_CMD_SENSORS_LOCKED,
+                                           ROF_CMD_NOT_IN_SAFE_STATE, ROF_CMD_CAUSE_ACTIVE };
+    for (size_t i = 0; i < sizeof(conflicts) / sizeof(conflicts[0]); i++) {
+        TEST_ASSERT_EQUAL_INT(409, rof_proto_http_status(conflicts[i]));
+    }
+    const rof_cmd_result_t invalid[] = { ROF_CMD_SETPOINT_TOO_LOW, ROF_CMD_SETPOINT_TOO_HIGH,
+                                         ROF_CMD_SETPOINT_NOT_A_NUMBER, ROF_CMD_UNKNOWN_SENSOR,
+                                         ROF_CMD_INVALID_VALUE };
+    for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) {
+        TEST_ASSERT_EQUAL_INT(422, rof_proto_http_status(invalid[i]));
+    }
+    TEST_ASSERT_EQUAL_INT(500, rof_proto_http_status(ROF_CMD_STORAGE_ERROR));
+    TEST_ASSERT_EQUAL_INT(400, rof_proto_http_status(ROF_CMD_UNKNOWN_COMMAND));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -281,6 +473,17 @@ int main(void)
 
     RUN_TEST(test_names_match_api_description);
     RUN_TEST(test_values_outside_lists_are_unknown);
+
+    RUN_TEST(test_state_matches_api_example);
+    RUN_TEST(test_state_without_setpoint_is_null);
+    RUN_TEST(test_duplicate_channel_temperature_is_null);
+    RUN_TEST(test_largest_state_fits);
+    RUN_TEST(test_state_reports_too_small_buffer);
+    RUN_TEST(test_limits_encoding);
+    RUN_TEST(test_command_response_encoding);
+    RUN_TEST(test_rejection_encoding_and_status);
+    RUN_TEST(test_server_error_encoding);
+    RUN_TEST(test_http_status_per_result);
 
     return UNITY_END();
 }

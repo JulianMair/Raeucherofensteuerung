@@ -5,6 +5,7 @@ add_library(rof_proto STATIC
     rof_json_reader.c
     rof_json_writer.c
     rof_proto_decode.c
+    rof_proto_encode.c
     rof_proto_names.c
 )
 target_include_directories(rof_proto PUBLIC include)

@@ -18,6 +18,8 @@
 
 #define ROF_PROTO_MAX_BODY 256     /* größere Anfragen werden nicht gelesen (413) */
 #define ROF_PROTO_SENSOR_ID_LEN 16 /* Hex-Ziffern einer Sensor-ID */
+#define ROF_PROTO_STATE_JSON_MAX 3072 /* Puffer, in den jeder Zustand passt (getestet) */
+#define ROF_PROTO_SMALL_JSON_MAX 128  /* Puffer für Grenzen, Antworten und Fehler */
 
 typedef enum {
     ROF_PROTO_OK = 0,
@@ -56,6 +58,33 @@ rof_proto_result_t rof_proto_decode_role(const char *sensor_id, const char *body
 /* PUT /api/sensors/{id}/offset mit {"offset_c": Zahl} */
 rof_proto_result_t rof_proto_decode_offset(const char *sensor_id, const char *body, size_t len,
                                            const rof_limits_t *limits, rof_command_t *cmd);
+
+/* ---- Antworten kodieren ------------------------------------------------
+ * Alle schreiben JSON nach buf (Größe size) und die Länge nach *len.
+ * false, wenn der Puffer zu klein war. */
+
+/* GET /api/state und jede Nachricht auf /ws */
+bool rof_proto_encode_state(const rof_snapshot_t *snapshot, char *buf, size_t size, size_t *len);
+
+/* GET /api/config */
+bool rof_proto_encode_limits(const rof_limits_t *limits, char *buf, size_t size, size_t *len);
+
+/* Ergebnis des Regeltasks: {"seq": ..., "result": ...} */
+bool rof_proto_encode_command_response(uint32_t seq, rof_cmd_result_t result, char *buf, size_t size,
+                                       size_t *len);
+
+/* Von proto abgelehnt: bei Wert außerhalb {"result": Grund}, sonst {"error": ..., "field": ...} */
+bool rof_proto_encode_rejection(const rof_proto_result_t *rejection, char *buf, size_t size, size_t *len);
+
+/* Fehler des Webservers selbst, z. B. "busy", "timeout", "not_ready" */
+bool rof_proto_encode_error(const char *error, bool has_seq, uint32_t seq, char *buf, size_t size,
+                            size_t *len);
+
+/* HTTP-Status für ein Ergebnis des Regeltasks (E-028) */
+int rof_proto_http_status(rof_cmd_result_t result);
+
+/* HTTP-Status für eine Ablehnung durch proto: 413 zu groß, 422 außerhalb der Grenzen, sonst 400 */
+int rof_proto_rejection_http_status(const rof_proto_result_t *rejection);
 
 /* ---- Sensor-IDs: genau 16 Hex-Ziffern in Großbuchstaben (E-028) -------- */
 
