@@ -73,3 +73,7 @@ add_test(NAME json_writer COMMAND test_json_writer)
 add_executable(test_json_reader test_json_reader.c)
 target_link_libraries(test_json_reader PRIVATE unity rof_proto project_warnings)
 add_test(NAME json_reader COMMAND test_json_reader)
+
+add_executable(test_proto test_proto.c)
+target_link_libraries(test_proto PRIVATE unity rof_proto project_warnings)
+add_test(NAME proto COMMAND test_proto)
