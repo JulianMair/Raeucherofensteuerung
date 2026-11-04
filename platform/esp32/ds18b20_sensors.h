@@ -14,6 +14,10 @@
  * Ein Sensor liefert erst einen Wert, wenn er beim Anstoßen der Messung
  * schon bekannt war. Sonst stünde noch der Einschaltwert 85 °C in ihm.
  *
+ * Versagt der Bus beim Lesen, liest die Abfrage nicht weiter und stößt
+ * keine Messung an. Eine Abfrage greift dann höchstens zweimal auf den
+ * gestörten Bus zu: einmal lesen, einmal suchen.
+ *
  * Alle Funktionen nur aus einem Task aufrufen, in der Firmware dem Regeltask.
  */
 #ifndef DS18B20_SENSORS_H
@@ -43,8 +47,9 @@ typedef struct {
     rof_status_t (*search)(void *ctx, rof_sensor_id_t *ids, size_t max, size_t *count);
     /* Stößt bei allen Sensoren am Bus zugleich eine Messung an. */
     rof_status_t (*convert_all)(void *ctx);
-    /* Liest den Scratchpad eines Sensors, ohne ihn auszuwerten.
-     * ROF_ERR_IO: kein Sensor hat geantwortet. */
+    /* Liest den Scratchpad eines Sensors, ohne ihn auszuwerten. Fehlt nur
+     * dieser Sensor, liefert der Bus lauter Einsen und ROF_OK.
+     * ROF_ERR_IO: Der Bus selbst hat versagt, oder kein Sensor meldet sich. */
     rof_status_t (*read_scratchpad)(void *ctx, rof_sensor_id_t id, uint8_t sp[DS18B20_SCRATCHPAD_LEN]);
 } ds18b20_bus_t;
 

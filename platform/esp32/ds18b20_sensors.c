@@ -14,33 +14,42 @@ static ds18b20_slot_t *find_slot(ds18b20_sensors_t *sensors, rof_sensor_id_t id)
     return NULL;
 }
 
-/* 1. Messwerte lesen. Ein Wert gilt nur bis zur nächsten Messung. */
-static void read_values(ds18b20_sensors_t *sensors, bool conversion_done)
+/* 1. Messwerte lesen. Ein Wert gilt nur bis zur nächsten Messung.
+ * false, wenn der Bus selbst versagt hat. Dann wird nicht weiter gelesen:
+ * Auf dem ESP32 wartet jeder Zugriff auf einen gestörten Bus bis zu 1 s. */
+static bool read_values(ds18b20_sensors_t *sensors, bool conversion_done)
 {
+    bool bus_ok = true;
     for (size_t i = 0; i < sensors->count; i++) {
         ds18b20_slot_t *slot = &sensors->slots[i];
         slot->status = ROF_ERR_IO;
-        if (!conversion_done || !slot->in_conversion) {
+        if (!bus_ok || !conversion_done || !slot->in_conversion) {
             continue;
         }
         uint8_t sp[DS18B20_SCRATCHPAD_LEN];
+        if (sensors->bus->read_scratchpad(sensors->bus->ctx, slot->id, sp) != ROF_OK) {
+            bus_ok = false;
+            continue;
+        }
+        /* Ein einzelner kaputter Wert betrifft nur diesen Sensor */
         float temp_c = 0.0f;
-        if (sensors->bus->read_scratchpad(sensors->bus->ctx, slot->id, sp) == ROF_OK &&
-            ds18b20_decode_scratchpad(sp, &temp_c) == ROF_OK) {
+        if (ds18b20_decode_scratchpad(sp, &temp_c) == ROF_OK) {
             slot->status = ROF_OK;
             slot->temp_c = temp_c;
         }
     }
+    return bus_ok;
 }
 
-/* 2. Neue Messung bei allen bekannten Sensoren anstoßen */
-static void start_conversion(ds18b20_sensors_t *sensors)
+/* 2. Neue Messung bei allen bekannten Sensoren anstoßen. Nach einem
+ * Busfehler nicht, der Befehl würde ebenso lange warten. */
+static void start_conversion(ds18b20_sensors_t *sensors, bool bus_ok)
 {
     sensors->converting = false;
     for (size_t i = 0; i < sensors->count; i++) {
         sensors->slots[i].in_conversion = false;
     }
-    if (sensors->count == 0 || sensors->bus->convert_all(sensors->bus->ctx) != ROF_OK) {
+    if (!bus_ok || sensors->count == 0 || sensors->bus->convert_all(sensors->bus->ctx) != ROF_OK) {
         return;
     }
     /* Die Zeit erst nach dem Befehl nehmen: Ab dann läuft die Messung sicher */
@@ -89,8 +98,8 @@ void ds18b20_sensors_poll(ds18b20_sensors_t *sensors)
     if (sensors->converting && now_ms - sensors->conversion_ms < DS18B20_CONVERSION_MS) {
         return; /* zu früh, die Messung läuft noch */
     }
-    read_values(sensors, sensors->converting);
-    start_conversion(sensors);
+    const bool bus_ok = read_values(sensors, sensors->converting);
+    start_conversion(sensors, bus_ok);
     search_bus(sensors);
 }
 

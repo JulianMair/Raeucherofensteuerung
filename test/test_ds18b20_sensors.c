@@ -30,6 +30,7 @@ typedef struct {
     fake_clock_t *clock;
     bool search_fails;
     bool convert_fails;
+    bool bus_dead;              /* Datenleitung auf Masse: jeder Zugriff scheitert */
     uint64_t convert_takes_ms;  /* so lange dauert der Befehl selbst */
     int plug_on_search;         /* dieser Sensor wird beim nächsten Suchen eingesteckt, -1 keiner */
     unsigned convert_calls;
@@ -50,7 +51,7 @@ static rof_status_t fake_search(void *ctx, rof_sensor_id_t *ids, size_t max, siz
         f->sensors[f->plug_on_search].present = true;
         f->plug_on_search = -1;
     }
-    if (f->search_fails) {
+    if (f->search_fails || f->bus_dead) {
         *count = 0;
         return ROF_ERR_IO;
     }
@@ -74,7 +75,7 @@ static rof_status_t fake_convert_all(void *ctx)
 {
     fake_bus_t *f = ctx;
     f->convert_calls++;
-    if (f->convert_fails) {
+    if (f->convert_fails || f->bus_dead) {
         return ROF_ERR_IO;
     }
     for (size_t i = 0; i < f->count; i++) {
@@ -91,6 +92,13 @@ static rof_status_t fake_read_scratchpad(void *ctx, rof_sensor_id_t id, uint8_t 
 {
     fake_bus_t *f = ctx;
     f->read_calls++;
+    bool anyone_present = false;
+    for (size_t i = 0; i < f->count; i++) {
+        anyone_present = anyone_present || f->sensors[i].present;
+    }
+    if (f->bus_dead || !anyone_present) {
+        return ROF_ERR_IO; /* kein Sensor meldet sich beim Reset */
+    }
     for (size_t i = 0; i < f->count; i++) {
         const fake_sensor_t *s = &f->sensors[i];
         if (s->id != id || !s->present) {
@@ -108,7 +116,9 @@ static rof_status_t fake_read_scratchpad(void *ctx, rof_sensor_id_t id, uint8_t 
         }
         return ROF_OK;
     }
-    return ROF_ERR_IO; /* niemand antwortet */
+    /* Andere Sensoren sind da, dieser nicht: Der Pull-up liefert lauter Einsen */
+    memset(sp, 0xFF, DS18B20_SCRATCHPAD_LEN);
+    return ROF_OK;
 }
 
 static fake_sensor_t *plug(rof_sensor_id_t id, uint16_t raw)
@@ -313,6 +323,22 @@ static void test_removed_sensor_is_not_found(void)
     TEST_ASSERT_EQUAL(ROF_OK, read_temp(ID_A, &temp_c));
 }
 
+/* Der letzte Sensor wird abgezogen: Beim Lesen meldet sich niemand mehr,
+ * die Suche findet ihn nicht, er gilt als nicht vorhanden. */
+static void test_last_sensor_removed_is_not_found(void)
+{
+    fake_sensor_t *a = plug(ID_A, 0x0158);
+    poll_and_wait();
+    poll_and_wait();
+    poll_and_wait();
+    a->present = false;
+    poll_and_wait();
+
+    TEST_ASSERT_EQUAL_size_t(0, enumerate_count(ROF_OK));
+    float temp_c = 0.0f;
+    TEST_ASSERT_EQUAL(ROF_ERR_NOT_FOUND, read_temp(ID_A, &temp_c));
+}
+
 static void test_unknown_id_is_not_found(void)
 {
     float temp_c = 0.0f;
@@ -351,6 +377,28 @@ static void test_failed_conversion_leaves_no_values(void)
 
     float temp_c = 0.0f;
     TEST_ASSERT_EQUAL(ROF_ERR_IO, read_temp(ID_A, &temp_c));
+}
+
+/* Versagt der Bus selbst, z. B. weil die Datenleitung auf Masse liegt,
+ * wartet auf dem ESP32 jeder Zugriff bis zu 1 s. Die Abfrage liest dann
+ * nicht weiter und stößt keine Messung an, damit der Regeltask nicht
+ * sekundenlang steht (E-032). */
+static void test_bus_failure_stops_reading_and_skips_conversion(void)
+{
+    plug(ID_A, 0x0158);
+    plug(ID_B, 0x0190);
+    poll_and_wait();
+    poll_and_wait();
+    poll_and_wait();
+    const unsigned reads = fake.read_calls;
+    const unsigned converts = fake.convert_calls;
+
+    fake.bus_dead = true;
+    poll_and_wait();
+
+    TEST_ASSERT_EQUAL_UINT(reads + 1, fake.read_calls);
+    TEST_ASSERT_EQUAL_UINT(converts, fake.convert_calls);
+    TEST_ASSERT_EQUAL_size_t(0, enumerate_count(ROF_ERR_IO));
 }
 
 static void test_bus_error_reports_io_and_no_sensors(void)
@@ -400,9 +448,11 @@ int main(void)
     RUN_TEST(test_sensor_plugged_after_conversion_never_reports_power_on_value);
     RUN_TEST(test_new_sensor_is_listed_before_it_has_a_value);
     RUN_TEST(test_removed_sensor_is_not_found);
+    RUN_TEST(test_last_sensor_removed_is_not_found);
     RUN_TEST(test_unknown_id_is_not_found);
     RUN_TEST(test_read_error_hides_old_value);
     RUN_TEST(test_failed_conversion_leaves_no_values);
+    RUN_TEST(test_bus_failure_stops_reading_and_skips_conversion);
     RUN_TEST(test_bus_error_reports_io_and_no_sensors);
     RUN_TEST(test_too_many_sensors_reports_no_space);
     RUN_TEST(test_enumerate_with_small_list_reports_no_space);
