@@ -4,3 +4,10 @@
 # Firmware nicht, sie legt alles statisch an.
 CONFIG_IDF_TARGET="esp32s3"
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+
+# Task-Watchdog (SAF-08, E-036): Hängt der Regeltask länger als 5 s, startet
+# der Chip neu und beginnt in BEREIT mit Ausgang 0 (SAF-10).
+CONFIG_ESP_TASK_WDT_EN=y
+CONFIG_ESP_TASK_WDT_INIT=y
+CONFIG_ESP_TASK_WDT_PANIC=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=5

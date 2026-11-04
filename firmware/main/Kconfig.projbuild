@@ -1,0 +1,21 @@
+menu "Raeucherofensteuerung"
+
+    config ROF_ONEWIRE_GPIO
+        int "GPIO des 1-Wire-Busses (DS18B20)"
+        range 0 48
+        default 4
+        help
+            Datenleitung der DS18B20. Braucht einen Pull-up von 4,7 kOhm
+            nach 3,3 V. Die Sensoren werden ueber VDD versorgt, nicht
+            parasitaer.
+
+    config ROF_LED_GPIO
+        int "GPIO der LED (statt Heizelement)"
+        range 0 48
+        default 5
+        help
+            LED mit Vorwiderstand zwischen diesem Pin und Masse. Die
+            eingebaute RGB-LED der DevKitC-1 ist adressierbar und eignet
+            sich nicht.
+
+endmenu
