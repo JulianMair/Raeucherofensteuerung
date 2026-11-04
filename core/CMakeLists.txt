@@ -1,17 +1,12 @@
+include(sources.cmake)
+
 # Nur die Header aus include/. Mocks und Treiber brauchen die Interfaces,
 # aber nicht die Logik von core.
 add_library(rof_core_interfaces INTERFACE)
-target_include_directories(rof_core_interfaces INTERFACE include)
+target_include_directories(rof_core_interfaces INTERFACE ${ROF_CORE_INCLUDE_DIR})
 
 # Die Logik von core
-add_library(rof_core STATIC
-    control/rof_controller.c
-    control/rof_pi.c
-    control/rof_slow_pwm.c
-    control/rof_state_machine.c
-    safety/rof_safety.c
-    sensors/rof_sensor_registry.c
-)
+add_library(rof_core STATIC ${ROF_CORE_SOURCES})
 target_link_libraries(rof_core
     PUBLIC rof_core_interfaces
     PRIVATE project_warnings)
