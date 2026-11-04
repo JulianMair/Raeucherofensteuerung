@@ -4,6 +4,7 @@
 #   ROF_ESP32_IDF_SOURCES:      Treiber mit ESP-IDF, nur in der Firmware
 set(ROF_ESP32_PORTABLE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/ds18b20_protocol.c
+    ${CMAKE_CURRENT_LIST_DIR}/ds18b20_sensors.c
 )
 set(ROF_ESP32_IDF_SOURCES
 )
