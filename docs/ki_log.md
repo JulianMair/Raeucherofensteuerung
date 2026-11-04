@@ -165,5 +165,6 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 **Auffälligkeiten beim Umsetzen:**
 - Redocly meldete drei Warnungen, die zur API nicht passen (kein 4xx bei reinem Lesen, 101 beim WebSocket). Statt die Regeln abzuschalten, sind genau diese drei Stellen mit Begründung ausgenommen (E-029). Claude hatte im Plan angekündigt, Warnungen zu beheben statt abzuschalten; hier wäre „beheben“ ein erfundener Antwortstatus gewesen.
 - Eine erste Gegenprobe zum Vertragstest griff nicht, weil `sed` unter macOS die Adresse `0,/…/` nicht kennt; mit Python wiederholt, danach griff sie.
+- CI-Lauf #8 nach dem Push war rot: cppcheck 2.13 meldete in `test_json_reader.c` und `test_proto.c` `nullPointerRedundantCheck`, das lokale cppcheck 2.22 nicht. Claude hat die Prüfungen in die Hilfsfunktionen `field()` und `open_example()` verschoben, wie `existing_channel()` aus M2 (`b491cf4`). CI-Lauf #9 war grün.
 
-**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M6 ergänzt.
+**Vom Nutzer geändert oder abgelehnt:** nichts.
