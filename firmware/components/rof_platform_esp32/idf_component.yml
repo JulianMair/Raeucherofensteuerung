@@ -1,0 +1,4 @@
+# Abhängigkeiten aus der ESP Component Registry, Version exakt festgelegt.
+# Die aufgelöste Version steht in firmware/dependencies.lock.
+dependencies:
+  espressif/onewire_bus: "==1.1.2"
