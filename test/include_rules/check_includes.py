@@ -9,6 +9,8 @@ Regeln:
   core/          nur eigene Header aus core/ und die Standard-Header in CORE_STD
   proto/         nur eigene Header, core/include und die Standard-Header in PROTO_STD
   firmware/net/  keine Treiber: weder ESP-IDF "driver/..." noch Header aus platform/esp32/
+  platform/esp32/ kennt weder API noch Netzwerk: keine Header aus proto/ oder
+                 firmware/net/, keine Netzwerk-Header aus ESP-IDF (NET_PREFIXES)
 """
 import re
 import sys
@@ -26,6 +28,9 @@ CORE_HINTS = {
 # strtof aus stdlib.h braucht der JSON-Code, alles andere nicht.
 PROTO_STD = {"stdint.h", "stdbool.h", "stddef.h", "string.h", "float.h", "limits.h",
              "stdio.h", "stdlib.h"}
+
+# Netzwerk-Header aus ESP-IDF, die in platform/esp32 nichts verloren haben
+NET_PREFIXES = ("esp_http_server", "esp_https_server", "esp_wifi", "esp_netif", "lwip/")
 
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s*([<"])([^>"]+)[>"]')
 
@@ -89,12 +94,24 @@ def check_net(root, violations):
                                    "firmware/net bindet keine Treiber aus platform/esp32 ein"))
 
 
+def check_platform(root, violations):
+    esp32 = root / "platform" / "esp32"
+    foreign = {p.name for d in (root / "proto", root / "firmware" / "net") for p in sources(d)
+               if p.suffix == ".h"}
+    hint = "die Hardwareschicht kennt weder die API noch das Netzwerk"
+    for path in sources(esp32):
+        for line, _bracket, name in includes(path):
+            if Path(name).name in foreign or name.startswith(NET_PREFIXES):
+                violations.append((path, line, name, hint))
+
+
 def main(argv):
     root = Path(argv[1]).resolve() if len(argv) > 1 else Path(__file__).resolve().parents[2]
     violations = []
     check_core(root, violations)
     check_proto(root, violations)
     check_net(root, violations)
+    check_platform(root, violations)
 
     for path, line, name, hint in violations:
         print(f"{path.relative_to(root)}:{line}: verbotenes Include {name} ({hint})")

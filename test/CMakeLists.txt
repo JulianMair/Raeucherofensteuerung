@@ -78,6 +78,8 @@ add_include_violation_test(proto_esp     "proto/bad.c:2: verbotenes Include esp_
 add_include_violation_test(proto_time    "proto/bad.c:2: verbotenes Include time.h")
 add_include_violation_test(net_driver    "firmware/net/bad.c:2: verbotenes Include driver/gpio.h")
 add_include_violation_test(net_platform  "firmware/net/bad.c:2: verbotenes Include ds18b20.h")
+add_include_violation_test(platform_proto "platform/esp32/bad.c:2: verbotenes Include rof_proto.h")
+add_include_violation_test(platform_net  "platform/esp32/bad.c:2: verbotenes Include esp_http_server.h")
 
 add_executable(test_json_writer test_json_writer.c)
 target_link_libraries(test_json_writer PRIVATE unity rof_proto project_warnings)
