@@ -1,0 +1,6 @@
+# Startwerte für sdkconfig. sdkconfig selbst steht nicht im Repository.
+
+# Platine ESP32-S3-DevKitC-1 N16R8: 16 MB Flash. Den PSRAM nutzt die
+# Firmware nicht, sie legt alles statisch an.
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
