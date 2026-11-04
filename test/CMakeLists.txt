@@ -40,6 +40,10 @@ add_executable(test_integration test_integration.c)
 target_link_libraries(test_integration PRIVATE unity host_sim platform_host project_warnings)
 add_test(NAME integration COMMAND test_integration)
 
+add_executable(test_ds18b20_protocol test_ds18b20_protocol.c)
+target_link_libraries(test_ds18b20_protocol PRIVATE unity platform_esp32_portable project_warnings)
+add_test(NAME ds18b20_protocol COMMAND test_ds18b20_protocol)
+
 # Include-Regeln (CI-02): Prüfung des echten Projekts plus Gegenproben.
 # Jede Gegenprobe ist ein kleiner Ordner mit einem absichtlichen Verstoß.
 # Sie besteht nur, wenn genau die erwartete Meldung erscheint.

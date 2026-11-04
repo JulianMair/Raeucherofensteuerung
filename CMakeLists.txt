@@ -24,6 +24,7 @@ enable_testing()
 add_subdirectory(core)
 add_subdirectory(proto)
 add_subdirectory(platform/host)
+add_subdirectory(platform/esp32)
 add_subdirectory(test)
 
 # Statische Analyse: cmake --build build --target cppcheck
