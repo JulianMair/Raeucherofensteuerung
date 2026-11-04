@@ -168,3 +168,35 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 - CI-Lauf #8 nach dem Push war rot: cppcheck 2.13 meldete in `test_json_reader.c` und `test_proto.c` `nullPointerRedundantCheck`, das lokale cppcheck 2.22 nicht. Claude hat die Prüfungen in die Hilfsfunktionen `field()` und `open_example()` verschoben, wie `existing_channel()` aus M2 (`b491cf4`). CI-Lauf #9 war grün.
 
 **Vom Nutzer geändert oder abgelehnt:** nichts.
+
+## 2026-11-04 – M7 Firmware-Basis
+
+**Modell:** Claude Opus 5.5
+
+**Von der KI erzeugt:**
+- Plan für M7 mit Rückfragen zu Testeingabe, DS18B20-Treiber, Haltezeit des Ausgangs und Installation von ESP-IDF
+- Installation von ESP-IDF v5.5.6 unter `~/esp/esp-idf` und QEMU für Xtensa (vom Nutzer freigegeben)
+- ESP-IDF-Projekt `firmware/` mit `sdkconfig.defaults` (16 MB Flash, Task-Watchdog mit Neustart), `Kconfig.projbuild` (GPIOs), Hüllen für core, proto und platform/esp32; gemeinsame Quelllisten `core/sources.cmake`, `proto/sources.cmake`, `platform/esp32/sources.cmake`
+- CI-Job `firmware` im Container `espressif/idf:v5.5.6`
+- platform/esp32, reines C mit Host-Tests: `ds18b20_protocol` (CRC, ROM-Adresse, Scratchpad), `ds18b20_sensors` (Messablauf ohne Warten), `led_pwm` (langsame PWM mit Haltezeit)
+- platform/esp32 mit ESP-IDF: `esp32_onewire_bus` (auf `espressif/onewire_bus` 1.1.2), `esp32_led_output`, `esp32_clock`, `esp32_log`, `esp32_nvs_storage`
+- Firmware: `rof_exchange` (Befehlsqueue, Snapshot-Ablage), Regeltask, Statuslog, `app_main`
+- Tests: `test_ds18b20_protocol`, `test_ds18b20_sensors`, `test_led_pwm` mit Gegenproben; Include-Regel für platform/esp32 mit zwei Gegenproben
+- Rauchtest der Firmware in QEMU
+- Entscheidungen E-031 bis E-036, Glossar, Nachweise, `docs/hardwaretest.md`, README-Abschnitt Firmware
+
+**Vom Nutzer entschieden:**
+- in M7 nur das Statuslog, keine serielle Testkonsole
+- Bus von Espressif, DS18B20-Schicht selbst
+- LED fällt ohne neuen Tastgrad nach 3 s ab; Claude hatte darauf hingewiesen, dass das über den Wortlaut von CLAUDE.md hinausgeht (E-034)
+- Claude installiert ESP-IDF
+- Plan für M7 ohne Änderungen freigegeben
+
+**Auffälligkeiten beim Umsetzen:**
+- Die fertige Komponente `espressif/ds18b20` wartet 800 ms je Messung; deshalb nur der Bus von Espressif (E-032).
+- Beim Lesen des RMT-Treibers fiel auf, dass jeder Zugriff auf einen gestörten Bus bis zu 1 s wartet. Der erste Messablauf hätte jeden Sensor einzeln versucht. Claude hat einen Test geschrieben, der das zeigt, und den Ablauf geändert (`3b339bd`); der QEMU-Rauchtest bestätigt es.
+- `stdio.h` von ESP-IDF nutzt `#include_next`. Mit `-Wpedantic` baute proto in der Firmware nicht; für proto gilt `-Wpedantic` deshalb nur auf dem Host (E-031).
+- cppcheck meldete einen Fehlalarm zu einem nicht belegten Feld und einen verdeckten Namen im Test; beides vor dem Commit behoben.
+- Claude hat den CI-Job für die Firmware schon nach Commit 3 gepusht, um ihn früh zu prüfen, statt erst nach dem Meilenstein. CI-Lauf #10 war grün.
+
+**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M7 ergänzt.
