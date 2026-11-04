@@ -1,5 +1,5 @@
-# CI für den Host-Build: Bauen, Unity-Tests, statische Analyse.
-# Jobs für Web und Firmware kommen in späteren Meilensteinen dazu.
+# CI: Host-Build mit Unity-Tests und statischer Analyse, Firmware-Build
+# mit ESP-IDF. Der Job für die Weboberfläche kommt in M9 dazu.
 name: CI
 
 on:
@@ -45,3 +45,21 @@ jobs:
       # Version fest, Regeln in redocly.yaml (E-029).
       - name: OpenAPI prüfen
         run: npx --yes @redocly/cli@2.64.0 lint docs/api.yaml
+
+  # Firmware mit fester ESP-IDF-Version im offiziellen Container (CI-04).
+  # Die Version muss zu der passen, mit der lokal gebaut wird (E-031).
+  firmware:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container: espressif/idf:v5.5.6
+    steps:
+      - uses: actions/checkout@v5
+
+      # Im Container gehört das Repository einem anderen Benutzer. Ohne diese
+      # Freigabe kann ESP-IDF die Projektversion nicht aus git lesen.
+      - name: Firmware bauen
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          . "$IDF_PATH/export.sh"
+          idf.py -C firmware build
