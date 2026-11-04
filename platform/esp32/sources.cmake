@@ -8,7 +8,10 @@ set(ROF_ESP32_PORTABLE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/led_pwm.c
 )
 set(ROF_ESP32_IDF_SOURCES
+    ${CMAKE_CURRENT_LIST_DIR}/esp32_clock.c
     ${CMAKE_CURRENT_LIST_DIR}/esp32_led_output.c
+    ${CMAKE_CURRENT_LIST_DIR}/esp32_log.c
+    ${CMAKE_CURRENT_LIST_DIR}/esp32_nvs_storage.c
     ${CMAKE_CURRENT_LIST_DIR}/esp32_onewire_bus.c
 )
 set(ROF_ESP32_INCLUDE_DIR ${CMAKE_CURRENT_LIST_DIR})
