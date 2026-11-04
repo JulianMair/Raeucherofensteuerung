@@ -301,3 +301,83 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
   - cJSON: bequem, aber mit malloc bei jeder Anfrage.
   - jsmn: bewährt und ohne malloc, aber fremder Code, und die Auswertung der Teile hätte trotzdem eigenen Code gebraucht.
   - Unbekannte Felder still ignorieren: Tippfehler blieben unbemerkt.
+
+## E-031 ESP-IDF v5.5.6, gleiche Version lokal und in CI (M7)
+
+- **Kontext:** CLAUDE.md verlangt ESP-IDF 5.x und in CI den Container `espressif/idf` mit fester Version (CI-04). Seit März 2026 gibt es auch 6.x.
+- **Entscheidung:**
+  - ESP-IDF v5.5.6, die neueste 5.x-Version (16.10.2026), lokal unter `~/esp/esp-idf` und in CI als `espressif/idf:v5.5.6`. Beide bauen dieselbe Firmware mit demselben Compiler.
+  - Die einzige Komponente aus der Registry, `espressif/onewire_bus`, steht mit `==1.1.2` in `idf_component.yml`. `firmware/dependencies.lock` kommt ins Repository; ihr Hash stimmt mit dem der Registry überein.
+  - core, proto und platform/esp32 bleiben, wo sie sind. Hüllen in `firmware/components/` lesen ihre Quellen aus `sources.cmake`, dieselbe Datei nutzt der Host-Build. So gibt es jede Quellliste nur einmal.
+  - Für core gelten in der Firmware dieselben Warnungen wie auf dem Host einschließlich `-Wpedantic`. Für proto nicht, weil `stdio.h` von ESP-IDF `#include_next` nutzt, eine GCC-Erweiterung. Streng nach C11 prüft proto der Host-Build.
+- **Verworfen:**
+  - ESP-IDF 6.x: nicht 5.x, wie CLAUDE.md verlangt.
+  - Den Container auch lokal nutzen: Flashen aus einem Container geht auf macOS nicht, und der Nutzer wollte keinen Docker-Nachbau.
+  - Die Quelllisten in den Hüllen wiederholen: Eine neue Datei müsste an zwei Stellen eingetragen werden.
+
+## E-032 DS18B20: eigener Ablauf auf dem Bus von Espressif (M7)
+
+- **Kontext:** Eine Messung des DS18B20 dauert bis zu 750 ms. Der Regeltask darf nicht so lange stehen (ARC-09). Die fertige Komponente `espressif/ds18b20` wartet nach dem Anstoßen 800 ms mit `vTaskDelay`.
+- **Entscheidung:**
+  - Vom Nutzer gewählt: Das Timing des Busses kommt aus `espressif/onewire_bus` (RMT-Hardware), alles darüber ist eigener Code. `ds18b20_protocol` (CRC, ROM-Adresse, Scratchpad) und `ds18b20_sensors` (Ablauf) sind reines C mit Host-Tests, `esp32_onewire_bus` schickt nur die Befehle aus dem Datenblatt.
+  - Ablauf je Abfrage: Werte der vorigen Messung lesen, neue Messung bei allen bekannten Sensoren anstoßen, dann den Bus absuchen, während die Messung läuft. Beim Takt von 1 s liegt fast eine Sekunde zwischen Anstoßen und Lesen. Die Zeit zählt ab dem Ende des Befehls.
+  - Einen Wert liefert nur ein Sensor, der beim Anstoßen schon bekannt war. Ein später eingesteckter Sensor hätte noch den Einschaltwert 85 °C im Scratchpad, und 85 °C ist im Räucherofen ein gültiger Wert.
+  - Ein Wert gilt nur bis zur nächsten Messung. Ein Lesefehler zeigt nie den alten Wert.
+  - Lauter Nullen (Datenleitung auf Masse) haben eine gültige CRC. Erkannt werden sie am Konfigurationsregister, dessen Bits 0 bis 4 immer 1 sind.
+  - Versagt der Bus selbst, wartet der RMT-Treiber je Zugriff bis zu 1 s. Die Abfrage liest dann nicht weiter und stößt nichts an. So kostet ein gestörter Bus höchstens zwei Zugriffe je Zyklus statt einen je Sensor. Aufgefallen beim Lesen des RMT-Treibers, mit Test behoben, im QEMU-Rauchtest bestätigt.
+  - Die Sensor-ID hat den Familiencode 28 im höchsten Byte, so wie man DS18B20-Adressen üblicherweise liest.
+  - Plausibel ist ein Wert nur, wenn core das sagt (SAF-04). Der Treiber prüft nur, ob die Daten korrekt übertragen wurden.
+- **Verworfen:**
+  - `espressif/ds18b20` mit eigenem Sensortask und Zwischenspeicher: ein Task mehr, und die Werte bräuchten eine Altersprüfung.
+  - Eigenes 1-Wire per Bit-Banging: Das Timing im Mikrosekundenbereich ist mit Interrupts störanfällig.
+  - Den Zustand nach dem Einschalten am Wert 85 °C erkennen: Das schlösse echte 85 °C aus.
+
+## E-033 Verhalten bei Fehlern beim Start (M7)
+
+- **Kontext:** Beim Start kann jeder Teil der Hardware versagen. Die Regelung soll möglichst laufen und Fehler zeigen, aber nie mit einem Ausgang, den sie nicht steuern kann.
+- **Entscheidung:**
+  - Der LED-Ausgang kommt zuerst. Lässt er sich nicht einrichten, startet die Regelung nicht; der Pin ist dann nicht als Ausgang geschaltet.
+  - NVS und 1-Wire-Bus dürfen fehlen. Ihre Interfaces liefern dann `ROF_ERR_IO`, und core zeigt das: keine gespeicherte Zuordnung, fehlender Garraumsensor, damit FEHLER und kein Start.
+  - Vor dem ersten Regelzyklus sucht `app_main` die Sensoren, stößt eine Messung an und wartet sie ab. Der erste Zyklus hat so schon Werte, der Start zeigt nicht kurz FEHLER.
+- **Verworfen:**
+  - Bei jedem Fehler neu starten: Ein dauerhaft defekter Sensor ergäbe eine Neustartschleife ohne Anzeige.
+  - Ohne Ausgang weiterlaufen: Die Anzeige würde einen Tastgrad zeigen, den niemand schaltet.
+
+## E-034 LED-Ausgang mit Haltezeit (M7)
+
+- **Kontext:** Die langsame PWM schaltet ein Timer unabhängig vom Regeltask (E-023). Hängt der Regeltask, liefe der letzte Tastgrad weiter, bis der Watchdog nach 5 s neu startet.
+- **Entscheidung:**
+  - Vom Nutzer gewählt: Ein Tastgrad gilt nur so lange wie das Zeitfenster des Regelzyklus (3 s, SAF-08). Kommt kein neuer, ist die LED aus. Das steckt in `led_pwm`, reines C mit Host-Tests. Es geht über den Wortlaut von CLAUDE.md hinaus und stützt SAF-08.
+  - Ein `esp_timer` prüft alle 50 ms und schaltet den Pin, das sind 1,25 Prozent Auflösung bei 4 s Periode. Den Zustand teilen Regeltask und Timer-Task, unter Umständen auf verschiedenen Kernen. Ein Spinlock schützt ihn.
+  - Beim Start wird der Pegel 0 vorgegeben, bevor der Pin ein Ausgang wird (SAF-10).
+  - Die LED hängt zwischen Pin und Masse, Pegel 1 heißt an. Die eingebaute RGB-LED der DevKitC-1 ist adressierbar und eignet sich nicht.
+- **Verworfen:**
+  - PWM-Hardware (LEDC): Dann schaltete nicht `rof_slow_pwm_on`, und die Logik wäre nicht auf dem Host prüfbar (E-023).
+  - Nur der Watchdog: bis zu 5 s weiter heizen mit einem Regeltask, der nicht mehr prüft.
+
+## E-035 NVS als Speicher (M7)
+
+- **Kontext:** Die Sensorzuordnung muss einen Neustart überleben (SEN-04). Das Interface verspricht, dass der Puffer bei einem Fehler unverändert bleibt.
+- **Entscheidung:**
+  - Namensraum `rof`, je Schlüssel ein Block (`nvs_set_blob`), nach jedem Schreiben `nvs_commit`.
+  - Lesen erst die Größe, dann über eine Kopie von höchstens 256 Byte. Scheitert das Lesen mittendrin, bleibt der Puffer des Aufrufers unverändert. Die Zuordnung braucht höchstens 106 Byte (E-012).
+  - Ist die NVS-Partition voll oder von einer neueren ESP-IDF-Version, wird sie gelöscht und neu eingerichtet, wie es ESP-IDF vorsieht. Die Zuordnung ist dann weg; das Log meldet es als Warnung.
+  - Geschrieben wird nur beim Zuweisen von Rolle oder Offset, und das ist beim Heizen gesperrt (E-022). Das kurze Anhalten beider Kerne beim Schreiben in den Flash trifft also nie das Heizen.
+- **Verworfen:**
+  - Direkt in den Puffer des Aufrufers lesen: Bei einem Lesefehler mittendrin wäre er teilweise überschrieben.
+  - Beim Lesefehler der Partition nicht löschen, sondern ohne Speicher laufen: Nach einem Update von ESP-IDF bliebe der Speicher dauerhaft unbenutzbar.
+
+## E-036 Regeltask, Snapshot-Ablage und Watchdog (M7)
+
+- **Kontext:** Der Regeltask hat die höchste Priorität der Anwendung und darf nie blockieren (ARC-08, ARC-09). Der Zustand geht nur als Kopie unter Mutex nach außen (ARC-07).
+- **Entscheidung:**
+  - Regeltask mit Priorität 10, über dem Statuslog (1) und dem HTTP-Server von ESP-IDF (5, ab M8). Fest auf CPU 1, WLAN und lwIP laufen auf CPU 0. Takt mit `vTaskDelayUntil` jede Sekunde.
+  - Befehlsqueue mit 16 Plätzen und Snapshot-Ablage liegen in der Komponente `rof_exchange`, die keinen Treiber kennt. Der Webserver in M8 nutzt nur sie.
+  - Der Regeltask holt Befehle ohne Warten und nimmt den Mutex der Snapshot-Ablage ohne Warten. Ist er belegt, veröffentlicht er im nächsten Zyklus und zählt das mit. Leser kopieren unter dem Mutex, das dauert Mikrosekunden.
+  - Task-Watchdog mit 5 s und Neustart (`CONFIG_ESP_TASK_WDT_PANIC`). Nach dem Neustart ist der Zustand BEREIT und der Ausgang 0 (SAF-10).
+  - Queue, Mutex und beide Tasks liegen in statischem Speicher. Nach dem Start legt die Firmware nichts mehr an, bis auf den kurzen Iterator von `onewire_bus` bei jeder Suche.
+  - Vom Nutzer gewählt: In M7 ist das serielle Statuslog der einzige Weg zu beobachten. Es zeigt alle 5 s Zustand, Sensoren, Zykluszeit, freien Stack und Heap, mit den Namen aus proto wie in der API. Befehle gibt es erst mit der API in M8.
+- **Verworfen:**
+  - Den Mutex mit Wartezeit nehmen: Mit Prioritätsvererbung ginge das meist schnell, aber der Regeltask könnte warten.
+  - Doppelpuffer ohne Mutex: CLAUDE.md verlangt einen Mutex.
+  - Eine serielle Testkonsole für Befehle schon in M7: eine Funktion außerhalb von CLAUDE.md, vom Nutzer abgelehnt.

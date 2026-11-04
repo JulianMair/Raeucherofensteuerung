@@ -2,7 +2,7 @@
 
 Steuerungssoftware für einen Räucherofen auf einem ESP32-S3. Prüfungsleistung im IU-Modul „Projekt: Software Development“. Getestet wird mit DS18B20-Sensoren und einer LED statt Heizelement, ohne Netzspannung.
 
-Stand: Meilenstein M6 (API). Die vollständige Anleitung zu Bauen, Flashen und Testen folgt in M11.
+Stand: Meilenstein M7 (Firmware-Basis). Die vollständige Anleitung zu Bauen, Flashen und Testen folgt in M11.
 
 ## Ordner
 
@@ -52,6 +52,38 @@ npx --yes @redocly/cli@2.64.0 lint docs/api.yaml
 
 Dieselben Schritte laufen in CI (`.github/workflows/ci.yml`) bei jedem Push. Lokal misst Apples `gcov` (LLVM), in CI misst GCC; maßgeblich ist CI.
 
+## Firmware
+
+Gebaut wird mit ESP-IDF v5.5.6, derselben Version wie in CI (E-031). Einmalig installieren, rund 2 GB:
+
+```bash
+git clone -b v5.5.6 --recursive https://github.com/espressif/esp-idf.git ~/esp/esp-idf
+```
+
+```bash
+~/esp/esp-idf/install.sh esp32s3
+```
+
+In jedem neuen Terminal die Umgebung laden, dann bauen:
+
+```bash
+. ~/esp/esp-idf/export.sh
+```
+
+```bash
+idf.py -C firmware build
+```
+
+Flashen und den seriellen Monitor öffnen (beenden mit Ctrl+]):
+
+```bash
+idf.py -C firmware flash monitor
+```
+
+Die Pins für 1-Wire-Bus (Standard GPIO 4) und LED (Standard GPIO 5) stehen in `idf.py -C firmware menuconfig` unter „Raeucherofensteuerung“. Aufbau und Prüfschritte stehen in `docs/hardwaretest.md`.
+
+`firmware/sdkconfig` entsteht beim ersten Bauen aus `firmware/sdkconfig.defaults` und steht nicht im Repository. Nach einer Änderung an `sdkconfig.defaults` die Datei `firmware/sdkconfig` löschen, sonst gelten die alten Werte weiter.
+
 ## Dokumentation
 
 - `docs/anforderungen.md`: alle Anforderungen mit ID und Nachweis
@@ -59,6 +91,7 @@ Dieselben Schritte laufen in CI (`.github/workflows/ci.yml`) bei jedem Push. Lok
 - `docs/zustandsautomat.md`: Zustände und Übergänge
 - `docs/api.yaml`: OpenAPI-Beschreibung der Schnittstelle, Beispiel für den Zustand in `docs/api-examples/state.json`
 - `docs/glossar.md`: deutsche Fachbegriffe und ihre englischen Namen im Code
+- `docs/hardwaretest.md`: Aufbau und Prüfschritte auf der Platine
 - `docs/ki_log.md`: Kennzeichnung der KI-Nutzung
 
 ## KI-Nutzung

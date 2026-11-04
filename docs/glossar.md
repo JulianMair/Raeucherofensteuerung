@@ -101,5 +101,15 @@ In Prüfreihenfolge. Die erste Ursache, die auslöst, wird verriegelt.
 | Ablehnung durch proto | `rof_proto_result_t` mit `ROF_PROTO_…` |
 | Vertragstest (proto gegen API-Beispiel) | `test_state_matches_api_example` |
 | Schreiber, Leser (JSON) | `rof_json_writer_t`, `rof_json_parse_flat()` |
+| Regeltask | `control_task` (Firmware) |
+| Befehlsqueue | `command_queue_t` in `rof_exchange` |
+| Snapshot-Ablage | `snapshot_store_t` in `rof_exchange` |
+| Statuslog | `status_log` (Firmware, serielles Log) |
+| Abfrage der Sensoren | `ds18b20_sensors_poll()` |
+| Messung anstoßen | `convert_all` (Befehl CONVERT T) |
+| Scratchpad (Speicher des DS18B20 mit Messwert und CRC) | `scratchpad`, `sp` |
+| ROM-Adresse | `rom`, als Sensor-ID `rof_sensor_id_t` |
+| Haltezeit des Tastgrads | `hold_ms` in `led_pwm_t` |
+| reiner C-Teil von platform/esp32 | `ROF_ESP32_PORTABLE_SOURCES` |
 
 In der API (`docs/api.yaml`) stehen dieselben englischen Namen in Kleinbuchstaben, zum Beispiel `ROF_STATE_SAFE_STATE` als `"safe_state"` oder `ROF_ROLE_CHAMBER` als `"chamber"`.
