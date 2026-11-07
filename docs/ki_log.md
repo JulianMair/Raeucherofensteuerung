@@ -230,4 +230,4 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 - Bei der Checkliste fiel auf, dass der HTTP-Server Befehle nacheinander bearbeitet. Über HTTP liegt deshalb nie mehr als ein Befehl in der Queue; die Erwartung für den Flut-Test wurde angepasst (E-039).
 - Zwei frühe Pushes nach der neuen Regel: nach dem LittleFS-Abbild (CI-Lauf #12) und nach der Symbolprüfung (CI-Lauf #13), beide grün.
 
-**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M8 ergänzt.
+**Vom Nutzer geändert oder abgelehnt:** nichts. CI-Lauf #14 nach dem Push war grün. Der Nutzer hat M9 vor den Hardwaretests H7 und H8 begonnen; deren Ergebnisse stehen noch aus.
