@@ -290,3 +290,32 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 - Die Abweichungen im Simulator sind sehr klein, weil der Simulator dasselbe Modell nutzt. Claude hat darauf hingewiesen, dass das die Güte an echtem Fleisch nicht belegt (E-047).
 
 **Vom Nutzer geändert oder abgelehnt:** nichts. CI-Lauf #18 nach dem Push war grün. Der Nutzer hat die Oberfläche mit einem interaktiven Ersatzgerät von Claude (Node-Skript im Scratchpad) durchgeklickt und die Host-Tests (37 ctest-Einträge) und Web-Tests (105) selbst ausgeführt, alle grün. Das Ersatzgerät ins Repository aufzunehmen hat der Nutzer abgelehnt. Programme wie für Lachs sollen später kommen, außerhalb des Prüfungsumfangs. Die Hardwaretests H7 bis H10 stehen aus, die Bauteile fehlen noch.
+
+## 2026-11-07 – M11 Abschluss
+
+**Modell:** Claude Opus 5.5
+
+**Von der KI erzeugt:**
+- Plan für M11 mit Rückfragen zum Hardwaretest, zur Prüfung der Nachweise, zum Ausblick und zum Git-Tag
+- Prüfskript `test/requirements/check_evidence.py` mit zwei ctests, einer davon als Gegenprobe mit kaputter Tabelle (E-049)
+- Durchsicht aller 56 Anforderungen mit Status je Nachweis (E-050) und korrigierten Pfaden
+- `docs/testbericht.md`: Ergebnis auf einen Blick, Teststufen mit Zahlen aus echten Läufen, Abgleich je Bereich, Gegenproben, gefundene Fehler aus M2 bis M11, Hardware als „ausstehend“, bekannte Grenzen
+- README neu: Funktionen, Architektur als Mermaid-Diagramm, Voraussetzungen, Bauen und Testen, Firmware, Hardware, Bedienung, CI
+- Entscheidungen E-049 bis E-051
+
+**Vom Nutzer entschieden:**
+- Testbericht und Abgleich jetzt, Hardwaretests später in einem eigenen Commit nachtragen (E-051)
+- Prüfung der Nachweise als ctest
+- kein Abschnitt „Grenzen und Ausblick“ in der README
+- Git-Tag erst nach den Hardwaretests und nur auf ausdrücklichen Wunsch
+- Plan für M11 ohne Änderungen freigegeben
+
+**Auffälligkeiten beim Umsetzen:**
+- Beim ersten Lauf fand `requirements_evidence` drei veraltete Pfade in den Nachweisen (Tests der Oberfläche, Stylesheet, Befehlsqueue). Korrigiert wurden die Nachweise.
+- Alle Zahlen im Testbericht stammen aus Läufen am Stand `040e283`: 398 Unity-Tests, 39 ctest-Einträge, 105 Vitest-Tests, Abdeckung 100 % bei Zeilen und Zweigen, Budget 34 662 B, Firmware 916 112 B.
+- Das Mermaid-Diagramm der README hat Claude vor dem Commit mit mermaid 11.4.1 geparst, im Scratchpad und nicht im Repository; ein absichtlich kaputtes Diagramm wurde abgelehnt.
+- E-051 hält die Entscheidungen des Nutzers zu Hardware, Ausblick und Tag fest; im Plan waren nur E-049 und E-050 angekündigt.
+- In M11 gab es keinen neuen CI-Schritt, nur einen neuen ctest im bestehenden Job; deshalb kein früher Push.
+- Vor dem Push prüfte Claude jeden Commit in einem frischen Checkout. Dort meldete `requirements_evidence` zwei Fehler: `web/dist` und `firmware/sdkconfig` gab es nur lokal, in CI wäre der Host-Job rot gewesen. Claude hat die Ausnahme für erzeugte Pfade in den Commit des Skripts gelegt und die noch nicht gepushten Commits wie in M10 auf einem Hilfszweig neu aufgebaut; jeder Commit ist im frischen Checkout geprüft.
+
+**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review nachgetragen.
