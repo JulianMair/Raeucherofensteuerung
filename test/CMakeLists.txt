@@ -52,6 +52,10 @@ add_executable(test_led_pwm test_led_pwm.c)
 target_link_libraries(test_led_pwm PRIVATE unity platform_esp32_portable project_warnings)
 add_test(NAME led_pwm COMMAND test_led_pwm)
 
+add_executable(test_request_path test_request_path.c)
+target_link_libraries(test_request_path PRIVATE unity net_portable project_warnings)
+add_test(NAME request_path COMMAND test_request_path)
+
 # Include-Regeln (CI-02): Prüfung des echten Projekts plus Gegenproben.
 # Jede Gegenprobe ist ein kleiner Ordner mit einem absichtlichen Verstoß.
 # Sie besteht nur, wenn genau die erwartete Meldung erscheint.

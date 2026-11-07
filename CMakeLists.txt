@@ -1,5 +1,6 @@
-# Host-Build für core, proto und die Unity-Tests.
-# Die Firmware in firmware/ ist ein eigenes ESP-IDF-Projekt und wird hier nicht eingebunden.
+# Host-Build für core, proto, die reinen C-Teile von platform/esp32 und
+# firmware/net und die Unity-Tests. Die Firmware selbst ist ein eigenes
+# ESP-IDF-Projekt in firmware/ und wird hier nicht gebaut.
 cmake_minimum_required(VERSION 3.20)
 project(raeucherofen LANGUAGES C)
 
@@ -25,6 +26,7 @@ add_subdirectory(core)
 add_subdirectory(proto)
 add_subdirectory(platform/host)
 add_subdirectory(platform/esp32)
+add_subdirectory(firmware/net)
 add_subdirectory(test)
 
 # Statische Analyse: cmake --build build --target cppcheck
