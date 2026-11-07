@@ -1,0 +1,5 @@
+
+rof_controller.c.obj:
+00000000 T rof_controller_cycle
+00000000 T rof_controller_snapshot
+00000000 t seconds_since_last_cycle

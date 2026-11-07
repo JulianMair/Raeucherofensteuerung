@@ -97,6 +97,19 @@ add_include_violation_test(net_platform  "firmware/net/bad.c:2: verbotenes Inclu
 add_include_violation_test(platform_proto "platform/esp32/bad.c:2: verbotenes Include rof_proto.h")
 add_include_violation_test(platform_net  "platform/esp32/bad.c:2: verbotenes Include esp_http_server.h")
 
+# Symbole von firmware/net (ARC-04, E-042). Den echten Aufruf macht CI nach dem
+# Firmware-Build; hier laufen nur die Gegenproben mit fertigen nm-Ausgaben.
+set(CHECK_SYMBOLS ${CMAKE_CURRENT_SOURCE_DIR}/include_rules/check_net_symbols.py)
+set(SYMBOL_FIXTURES ${INCLUDE_FIXTURES}/symbols)
+add_test(NAME net_symbols_accepts_clean
+         COMMAND ${Python3_EXECUTABLE} ${CHECK_SYMBOLS} --net-symbols ${SYMBOL_FIXTURES}/net_clean.txt
+                 --forbidden-symbols ${SYMBOL_FIXTURES}/forbidden.txt)
+add_test(NAME net_symbols_detects_core_call
+         COMMAND ${Python3_EXECUTABLE} ${CHECK_SYMBOLS} --net-symbols ${SYMBOL_FIXTURES}/net_calls_core.txt
+                 --forbidden-symbols ${SYMBOL_FIXTURES}/forbidden.txt)
+set_tests_properties(net_symbols_detects_core_call PROPERTIES
+                     PASS_REGULAR_EXPRESSION "firmware/net ruft rof_controller_cycle aus forbidden.txt auf")
+
 add_executable(test_json_writer test_json_writer.c)
 target_link_libraries(test_json_writer PRIVATE unity rof_proto project_warnings)
 add_test(NAME json_writer COMMAND test_json_writer)

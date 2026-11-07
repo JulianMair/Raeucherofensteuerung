@@ -1,0 +1,4 @@
+api_handlers.c.obj:
+         U command_queue_send
+         U rof_controller_cycle
+         U rof_proto_encode_state

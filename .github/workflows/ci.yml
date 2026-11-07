@@ -63,3 +63,14 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           . "$IDF_PATH/export.sh"
           idf.py -C firmware build
+
+      # ARC-04: firmware/net ruft weder core noch Treiber auf (E-042)
+      - name: Symbole von firmware/net prüfen
+        shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          B=firmware/build/esp-idf
+          python3 test/include_rules/check_net_symbols.py --nm xtensa-esp32s3-elf-nm \
+            --net $B/rof_net/librof_net.a \
+            --forbidden $B/rof_core/librof_core.a $B/rof_platform_esp32/librof_platform_esp32.a \
+              $B/espressif__onewire_bus/libespressif__onewire_bus.a $B/esp_driver_*/libesp_driver_*.a

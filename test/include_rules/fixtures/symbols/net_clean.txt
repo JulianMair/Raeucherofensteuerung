@@ -1,0 +1,4 @@
+api_handlers.c.obj:
+         U command_queue_send
+         U httpd_resp_send
+         U rof_proto_encode_state
