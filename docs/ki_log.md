@@ -200,3 +200,34 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 - Claude hat den CI-Job für die Firmware schon nach Commit 3 gepusht, um ihn früh zu prüfen, statt erst nach dem Meilenstein. CI-Lauf #10 war grün.
 
 **Vom Nutzer geändert oder abgelehnt:** nichts. CI-Lauf #11 nach dem Push war grün. Der Nutzer hat M8 vor dem Hardwaretest begonnen; die Ergebnisse aus `docs/hardwaretest.md` stehen noch aus. Zum frühen Push nach Commit 3 hat Claude im Plan für M8 nachgefragt.
+
+## 2026-11-07 – M8 Netzwerk
+
+**Modell:** Claude Opus 5.5
+
+**Von der KI erzeugt:**
+- Plan für M8 mit Rückfragen zu Platzhalter-Passwort, Inhalt von LittleFS, Symbolprüfung und frühem Push
+- Ergebnissuche von core nach proto verschoben (`rof_proto_command_result`), mit Tests
+- Partitionstabelle mit LittleFS, gzip-Skript `firmware/tools/gzip_web.py`, Abbild mit `joltwallet/littlefs` 1.23.1, Platzhalterseite `firmware/www/index.html`
+- firmware/net, reines C mit Host-Tests: `request_path` (Sensorpfade, sichere Dateipfade, Content-Types), `dns_message` (Antworten für das Captive Portal), `wifi_credentials` (SSID, Passwort, Platzhalter)
+- firmware/net mit ESP-IDF: `wifi_ap` (WPA2, DHCP-Option 114), `dns_server`, `http_server` (LittleFS, Umleitung), `api_handlers` (REST über Queue und Snapshot), `ws_live` (WebSocket jede Sekunde); Hülle `firmware/components/rof_net`
+- Tests: `test_request_path`, `test_dns_message`, `test_wifi_credentials`, ctest `kconfig_placeholder`, Symbolprüfung `check_net_symbols.py` mit zwei ctests und CI-Schritt; Gegenproben für Pfade, DNS, Platzhalter und Symbole, letztere auch am echten Build
+- QEMU-Rauchtest: Mit Platzhalter startet kein Access Point, die Regelung läuft weiter
+- Entscheidungen E-037 bis E-042, Glossar, Nachweise, Checkliste H8 in `docs/hardwaretest.md`, README
+
+**Vom Nutzer entschieden:**
+- mit Platzhalter-Passwort startet der Access Point nicht
+- Platzhalterseite in LittleFS bis M9
+- Symbolprüfung für firmware/net in CI
+- früher Push erlaubt, wenn ein neuer oder geänderter CI-Schritt sonst erst am Ende auffiele
+- Plan für M8 ohne Änderungen freigegeben
+
+**Auffälligkeiten beim Umsetzen:**
+- Die Gegenprobe zum DNS-Code zeigte, dass der Test für Kompressionszeiger nur wegen eines zu kurzen Pakets bestand. Claude hat den Test verschärft, danach griff die Gegenprobe.
+- Im ersten Entwurf des Datei-Handlers las `strcmp` einen nicht belegten Pfad, wenn die Zuordnung scheiterte. Beim Durchlesen vor dem Commit bemerkt und behoben.
+- Ein Aufzählungswert hieß wie das Makro des Platzhalters; der Compiler meldete es, umbenannt in `NET_WIFI_PASSWORD_IS_PLACEHOLDER`.
+- cppcheck meldete erneut einen verdeckten Namen in einem Test (`id`), umbenannt.
+- Bei der Checkliste fiel auf, dass der HTTP-Server Befehle nacheinander bearbeitet. Über HTTP liegt deshalb nie mehr als ein Befehl in der Queue; die Erwartung für den Flut-Test wurde angepasst (E-039).
+- Zwei frühe Pushes nach der neuen Regel: nach dem LittleFS-Abbild (CI-Lauf #12) und nach der Symbolprüfung (CI-Lauf #13), beide grün.
+
+**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M8 ergänzt.
