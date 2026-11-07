@@ -56,6 +56,10 @@ add_executable(test_request_path test_request_path.c)
 target_link_libraries(test_request_path PRIVATE unity net_portable project_warnings)
 add_test(NAME request_path COMMAND test_request_path)
 
+add_executable(test_dns_message test_dns_message.c)
+target_link_libraries(test_dns_message PRIVATE unity net_portable project_warnings)
+add_test(NAME dns_message COMMAND test_dns_message)
+
 # Include-Regeln (CI-02): Prüfung des echten Projekts plus Gegenproben.
 # Jede Gegenprobe ist ein kleiner Ordner mit einem absichtlichen Verstoß.
 # Sie besteht nur, wenn genau die erwartete Meldung erscheint.
