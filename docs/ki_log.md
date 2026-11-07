@@ -259,4 +259,4 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 - Ein `eslint-disable` für eine nicht installierte Regel und ein Typ, der `unassigned` als Rolle mit Messwert zuließ, fielen bei Lint und Typprüfung auf und wurden behoben.
 - Zwei frühe Pushes nach der Regel für neue CI-Schritte: nach dem Web-Job (CI-Lauf #15) und nach der Kopplung von Web- und Firmware-Build.
 
-**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M9 ergänzt.
+**Vom Nutzer geändert oder abgelehnt:** nichts. CI-Lauf #17 nach dem Push war grün. Der Nutzer hat sich für das optionale M10 entschieden; die Hardwaretests H7 bis H9 stehen noch aus.
