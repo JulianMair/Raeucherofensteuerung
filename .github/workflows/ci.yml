@@ -90,11 +90,18 @@ jobs:
   # Firmware mit fester ESP-IDF-Version im offiziellen Container (CI-04).
   # Die Version muss zu der passen, mit der lokal gebaut wird (E-031).
   firmware:
+    needs: web
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     container: espressif/idf:v5.5.6
     steps:
       - uses: actions/checkout@v5
+
+      # Die Oberfläche baut der Web-Job; die Firmware schreibt sie ins LittleFS (E-043)
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-dist
+          path: web/dist
 
       # Im Container gehört das Repository einem anderen Benutzer. Ohne diese
       # Freigabe kann ESP-IDF die Projektversion nicht aus git lesen.
