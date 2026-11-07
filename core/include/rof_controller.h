@@ -10,6 +10,7 @@
  *   5. PI-Regler, nur in AUFHEIZEN und HALTEN
  *   6. rof_safety_limit_duty(): Die Sicherheitslogik hat das letzte Wort (SAF-02)
  *   7. Tastgrad an den Ausgang
+ *   8. Fertigzeit-Prognose, erst nach dem Ausgang und nur zur Anzeige (FC-01)
  * Wie oft der Zyklus läuft, legt der Aufrufer fest (Firmware: jede Sekunde).
  */
 #ifndef ROF_CONTROLLER_H
@@ -17,6 +18,7 @@
 
 #include "rof_clock.h"
 #include "rof_command.h"
+#include "rof_forecast.h"
 #include "rof_log.h"
 #include "rof_output.h"
 #include "rof_pi.h"
@@ -34,9 +36,13 @@
 #define ROF_CONTROLLER_DEFAULT_MAX_COMMANDS 4u
 /* So viele Befehlsergebnisse bleiben abrufbar: zwei volle Zyklen (E-026) */
 #define ROF_CONTROLLER_RECENT_RESULTS 8u
+/* Prognose für Kern 1 und Kern 2, Index 0 und 1 (E-047) */
+#define ROF_FORECAST_PROBES 2u
 
 typedef struct {
     unsigned max_commands_per_cycle; /* ARC-09: mehr wartet auf den nächsten Zyklus */
+    float core_target_min_c;         /* FC-01: erlaubter Bereich für das Kernziel */
+    float core_target_max_c;
     rof_safety_config_t safety;
     rof_fsm_config_t fsm;
     rof_pi_config_t pi;
@@ -69,6 +75,11 @@ typedef struct {
     rof_command_record_t recent[ROF_CONTROLLER_RECENT_RESULTS];
     size_t recent_count;
     size_t recent_next;
+    /* Fertigzeit-Prognose (FC-01, E-047), wird nicht gespeichert */
+    bool has_core_target;
+    float core_target_c;
+    rof_forecast_t forecast[ROF_FORECAST_PROBES];
+    rof_forecast_result_t forecast_result[ROF_FORECAST_PROBES];
 } rof_controller_t;
 
 /* ---- Snapshot (ARC-07, E-026) -------------------------------------------
@@ -100,6 +111,8 @@ typedef struct {
     float setpoint_max_c;
     float offset_max_c; /* Offset erlaubt von -offset_max_c bis +offset_max_c */
     float hard_max_c;   /* harte Grenze, nur zur Anzeige */
+    float core_target_min_c;
+    float core_target_max_c;
 } rof_limits_t;
 
 typedef struct {
@@ -117,6 +130,9 @@ typedef struct {
     bool sensor_overflow;
     size_t recent_count;
     rof_command_record_t recent[ROF_CONTROLLER_RECENT_RESULTS]; /* neuestes zuerst */
+    bool has_core_target;
+    float core_target_c;
+    rof_forecast_result_t forecast[ROF_FORECAST_PROBES]; /* [0] Kern 1, [1] Kern 2 */
 } rof_snapshot_t;
 
 /* Die vereinbarten Standardwerte aller Module (E-016, E-021, E-024). */

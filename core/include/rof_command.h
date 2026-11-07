@@ -21,13 +21,14 @@ typedef enum {
     ROF_COMMAND_STOP,
     ROF_COMMAND_ASSIGN_ROLE,      /* sensor_id, role */
     ROF_COMMAND_SET_OFFSET,       /* sensor_id, value_c = Offset */
-    ROF_COMMAND_RESET             /* sicheren Zustand zurücksetzen */
+    ROF_COMMAND_RESET,            /* sicheren Zustand zurücksetzen */
+    ROF_COMMAND_SET_CORE_TARGET   /* value_c = Kernziel für die Prognose (FC-01) */
 } rof_command_type_t;
 
 typedef struct {
     uint32_t seq;              /* laufende Nummer des Absenders, kommt im Snapshot zurück */
     rof_command_type_t type;
-    float value_c;             /* Sollwert oder Offset */
+    float value_c;             /* Sollwert, Offset oder Kernziel */
     rof_sensor_id_t sensor_id; /* für ROLLE ZUWEISEN und OFFSET SETZEN */
     rof_role_t role;           /* für ROLLE ZUWEISEN */
 } rof_command_t;
@@ -49,7 +50,9 @@ typedef enum {
     ROF_CMD_STORAGE_ERROR,         /* Speichern fehlgeschlagen, nichts geändert */
     ROF_CMD_NOT_IN_SAFE_STATE,     /* Reset außerhalb von SICHERER_ZUSTAND */
     ROF_CMD_CAUSE_ACTIVE,          /* Reset abgelehnt, die Ursache besteht noch */
-    ROF_CMD_UNKNOWN_COMMAND        /* unbekannter Befehlstyp */
+    ROF_CMD_UNKNOWN_COMMAND,       /* unbekannter Befehlstyp */
+    ROF_CMD_CORE_TARGET_TOO_LOW,   /* Kernziel unter der Grenze */
+    ROF_CMD_CORE_TARGET_TOO_HIGH   /* Kernziel über der Grenze */
 } rof_cmd_result_t;
 
 /* Ergebnis eines bearbeiteten Befehls, wie es im Snapshot erscheint */

@@ -13,6 +13,7 @@
 #include "mock_temp_sensor.h"
 #include "rof_controller.h"
 
+#include <math.h>
 #include <string.h>
 
 #define CHAMBER_ID 0x28CC000000000001ULL
@@ -696,6 +697,144 @@ static void test_snapshot_results_wrap_around(void)
     TEST_ASSERT_EQUAL_UINT32(3, snap.recent[ROF_CONTROLLER_RECENT_RESULTS - 1].seq);
 }
 
+/* ---- Kernziel und Prognose (FC-01, E-047) ------------------------------- */
+
+static void send_core_target(uint32_t seq, float target_c)
+{
+    send((rof_command_t){ .seq = seq, .type = ROF_COMMAND_SET_CORE_TARGET, .value_c = target_c });
+}
+
+static void test_core_target_is_set_and_shown(void)
+{
+    send_core_target(1, 68.0f);
+    cycle();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, result_of(1));
+    rof_controller_snapshot(&ctrl, &snap);
+    TEST_ASSERT_TRUE(snap.has_core_target);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 68.0f, snap.core_target_c);
+}
+
+/* Wie beim Sollwert: abgelehnt, nicht begrenzt, mit Grund (SAF-09) */
+static void test_core_target_outside_limits_is_rejected(void)
+{
+    send_core_target(1, 29.9f);
+    send_core_target(2, 100.1f);
+    send_core_target(3, NAN);
+    cycle();
+
+    TEST_ASSERT_EQUAL(ROF_CMD_CORE_TARGET_TOO_LOW, result_of(1));
+    TEST_ASSERT_EQUAL(ROF_CMD_CORE_TARGET_TOO_HIGH, result_of(2));
+    TEST_ASSERT_EQUAL(ROF_CMD_INVALID_VALUE, result_of(3));
+    rof_controller_snapshot(&ctrl, &snap);
+    TEST_ASSERT_FALSE(snap.has_core_target);
+}
+
+/* Das Kernziel ändert nichts an der Heizung, deshalb ist es immer erlaubt */
+static void test_core_target_can_change_while_heating(void)
+{
+    assign_chamber();
+    start_heating(80.0f);
+    cycle();
+    TEST_ASSERT_EQUAL(ROF_STATE_HEATING, rof_fsm_state(&ctrl.fsm));
+
+    send_core_target(1, 70.0f);
+    cycle();
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, result_of(1));
+}
+
+static void test_snapshot_shows_core_target_limits(void)
+{
+    config.core_target_min_c = 40.0f;
+    TEST_ASSERT_EQUAL(ROF_OK, rof_controller_init(&ctrl, &config, &io));
+
+    rof_controller_snapshot(&ctrl, &snap);
+
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 40.0f, snap.limits.core_target_min_c);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 100.0f, snap.limits.core_target_max_c);
+}
+
+static void test_init_rejects_empty_core_target_range(void)
+{
+    config.core_target_min_c = 80.0f;
+    config.core_target_max_c = 80.0f;
+    TEST_ASSERT_EQUAL(ROF_ERR_INVALID_ARG, rof_controller_init(&ctrl, &config, &io));
+}
+
+/* HALTEN bei 80 °C, Kern 1 nähert sich mit tau = 1 h. Der Garraum schwankt
+ * leicht, sonst meldet die Sicherheitslogik ihn als eingefroren (SAF-05). */
+static void hold_with_probe(unsigned seconds, float *last_probe)
+{
+    for (unsigned i = 0; i < seconds; i++) {
+        set_chamber((i % 2 == 0) ? 79.4f : 79.6f);
+        const float t_s = (float)i;
+        *last_probe = 79.5f + (20.0f - 79.5f) * expf(-t_s / 3600.0f);
+        mock_temp_sensor_set_temp(&bus_mock, PROBE_ID, *last_probe);
+        cycle();
+    }
+}
+
+static void start_holding_with_probe(void)
+{
+    assign_chamber();
+    TEST_ASSERT_EQUAL(ROF_OK, rof_sensor_registry_assign(&ctrl.registry, PROBE_ID, ROF_ROLE_PROBE_1));
+    start_heating(80.0f);
+    set_chamber(79.5f);
+    cycle();
+    TEST_ASSERT_EQUAL(ROF_STATE_HOLDING, rof_fsm_state(&ctrl.fsm));
+}
+
+static void test_forecast_in_snapshot(void)
+{
+    rof_controller_snapshot(&ctrl, &snap);
+    TEST_ASSERT_EQUAL(ROF_FORECAST_UNAVAILABLE, snap.forecast[0].status);
+    TEST_ASSERT_EQUAL(ROF_FORECAST_UNAVAILABLE, snap.forecast[1].status);
+
+    start_holding_with_probe();
+    send_core_target(1, 70.0f);
+    float probe = 0.0f;
+    hold_with_probe(ROF_FORECAST_MIN_SAMPLES * 10u + 10u, &probe);
+
+    rof_controller_snapshot(&ctrl, &snap);
+    TEST_ASSERT_EQUAL(ROF_STATE_HOLDING, snap.state);
+    TEST_ASSERT_EQUAL(ROF_FORECAST_OK, snap.forecast[0].status);
+    const float expected_s = 3600.0f * logf((79.5f - probe) / (79.5f - 70.0f));
+    TEST_ASSERT_FLOAT_WITHIN(expected_s * 0.05f, expected_s, (float)snap.forecast[0].remaining_s);
+    TEST_ASSERT_EQUAL(ROF_FORECAST_UNAVAILABLE, snap.forecast[1].status); /* Kern 2 nicht zugeordnet */
+}
+
+static void test_forecast_waits_while_heating(void)
+{
+    assign_chamber();
+    TEST_ASSERT_EQUAL(ROF_OK, rof_sensor_registry_assign(&ctrl.registry, PROBE_ID, ROF_ROLE_PROBE_1));
+    send_core_target(1, 70.0f);
+    start_heating(80.0f);
+    cycle();
+
+    rof_controller_snapshot(&ctrl, &snap);
+    TEST_ASSERT_EQUAL(ROF_STATE_HEATING, snap.state);
+    TEST_ASSERT_EQUAL(ROF_FORECAST_WAITING, snap.forecast[0].status);
+}
+
+/* FC-01, E-047: nur Anzeige. Mit und ohne Kernziel schaltet der Ausgang gleich. */
+static void test_forecast_does_not_change_the_output(void)
+{
+    float duties[2][400];
+    for (int run = 0; run < 2; run++) {
+        setUp();
+        start_holding_with_probe();
+        if (run == 1) {
+            send_core_target(1, 70.0f);
+        }
+        for (unsigned i = 0; i < 400; i++) {
+            float probe = 0.0f;
+            hold_with_probe(1, &probe);
+            duties[run][i] = heater_mock.duty;
+        }
+    }
+    TEST_ASSERT_EQUAL_FLOAT_ARRAY(duties[0], duties[1], 400);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -738,6 +877,14 @@ int main(void)
     RUN_TEST(test_snapshot_limits_follow_config);
     RUN_TEST(test_snapshot_command_results);
     RUN_TEST(test_snapshot_results_wrap_around);
+    RUN_TEST(test_core_target_is_set_and_shown);
+    RUN_TEST(test_core_target_outside_limits_is_rejected);
+    RUN_TEST(test_core_target_can_change_while_heating);
+    RUN_TEST(test_snapshot_shows_core_target_limits);
+    RUN_TEST(test_init_rejects_empty_core_target_range);
+    RUN_TEST(test_forecast_in_snapshot);
+    RUN_TEST(test_forecast_waits_while_heating);
+    RUN_TEST(test_forecast_does_not_change_the_output);
 
     return UNITY_END();
 }

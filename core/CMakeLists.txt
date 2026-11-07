@@ -7,8 +7,9 @@ target_include_directories(rof_core_interfaces INTERFACE ${ROF_CORE_INCLUDE_DIR}
 
 # Die Logik von core
 add_library(rof_core STATIC ${ROF_CORE_SOURCES})
+# m: logf in der Prognose; unter Linux steht die Mathe-Bibliothek nicht von selbst bereit
 target_link_libraries(rof_core
-    PUBLIC rof_core_interfaces
+    PUBLIC rof_core_interfaces m
     PRIVATE project_warnings)
 
 if(ROF_COVERAGE)

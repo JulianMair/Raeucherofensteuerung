@@ -100,6 +100,23 @@ static rof_cmd_result_t reset_safe_state(rof_controller_t *ctrl)
     return ROF_CMD_OK;
 }
 
+/* FC-01: Kernziel prüfen wie einen Sollwert, abgelehnt statt begrenzt */
+static rof_cmd_result_t set_core_target(rof_controller_t *ctrl, float target_c)
+{
+    if (target_c != target_c) {
+        return ROF_CMD_INVALID_VALUE; /* NaN ist sich selbst nicht gleich */
+    }
+    if (target_c < ctrl->config.core_target_min_c) {
+        return ROF_CMD_CORE_TARGET_TOO_LOW;
+    }
+    if (target_c > ctrl->config.core_target_max_c) {
+        return ROF_CMD_CORE_TARGET_TOO_HIGH;
+    }
+    ctrl->has_core_target = true;
+    ctrl->core_target_c = target_c;
+    return ROF_CMD_OK;
+}
+
 /* ARC-06: Der Regeltask prüft jeden Befehl selbst. Unbekanntes wird verworfen. */
 static rof_cmd_result_t dispatch(rof_controller_t *ctrl, const rof_command_t *command)
 {
@@ -122,6 +139,8 @@ static rof_cmd_result_t dispatch(rof_controller_t *ctrl, const rof_command_t *co
         return from_registry(rof_sensor_registry_set_offset(&ctrl->registry, command->sensor_id, command->value_c));
     case ROF_COMMAND_RESET:
         return reset_safe_state(ctrl);
+    case ROF_COMMAND_SET_CORE_TARGET:
+        return set_core_target(ctrl, command->value_c); /* in jedem Zustand: wirkt nicht auf die Heizung */
     default:
         return ROF_CMD_UNKNOWN_COMMAND;
     }
@@ -140,12 +159,34 @@ static void process_commands(rof_controller_t *ctrl)
     }
 }
 
+/* Schritt 8: je Kernfühler eine Prognose. Gelernt wird nur in HALTEN (E-047). */
+static void update_forecasts(rof_controller_t *ctrl, bool chamber_ok, float chamber_c, uint64_t now_ms)
+{
+    static const rof_role_t PROBES[ROF_FORECAST_PROBES] = { ROF_ROLE_PROBE_1, ROF_ROLE_PROBE_2 };
+    for (size_t i = 0; i < ROF_FORECAST_PROBES; i++) {
+        float probe_c = 0.0f;
+        const bool probe_ok = rof_sensor_registry_role(&ctrl->registry, PROBES[i], &probe_c) == ROF_ROLE_STATUS_OK;
+        const rof_forecast_input_t input = {
+            .holding = rof_fsm_state(&ctrl->fsm) == ROF_STATE_HOLDING,
+            .chamber_ok = chamber_ok,
+            .chamber_c = chamber_c,
+            .probe_ok = probe_ok,
+            .probe_c = probe_c,
+            .has_target = ctrl->has_core_target,
+            .target_c = ctrl->core_target_c,
+        };
+        ctrl->forecast_result[i] = rof_forecast_update(&ctrl->forecast[i], &input, now_ms);
+    }
+}
+
 /* ---- Öffentliche Funktionen --------------------------------------------- */
 
 rof_controller_config_t rof_controller_default_config(void)
 {
     return (rof_controller_config_t){
         .max_commands_per_cycle = ROF_CONTROLLER_DEFAULT_MAX_COMMANDS,
+        .core_target_min_c = 30.0f,
+        .core_target_max_c = 100.0f,
         .safety = rof_safety_default_config(),
         .fsm = rof_fsm_default_config(),
         .pi = rof_pi_default_config(),
@@ -156,7 +197,7 @@ rof_status_t rof_controller_init(rof_controller_t *ctrl, const rof_controller_co
                                  const rof_controller_io_t *io)
 {
     if (ctrl == NULL || config == NULL || io == NULL || !io_is_valid(io) ||
-        config->max_commands_per_cycle == 0) {
+        config->max_commands_per_cycle == 0 || !(config->core_target_min_c < config->core_target_max_c)) {
         return ROF_ERR_INVALID_ARG;
     }
     ctrl->config = *config;
@@ -180,6 +221,12 @@ rof_status_t rof_controller_init(rof_controller_t *ctrl, const rof_controller_co
     ctrl->has_last_cycle = false;
     ctrl->recent_count = 0;
     ctrl->recent_next = 0;
+    ctrl->has_core_target = false;
+    ctrl->core_target_c = 0.0f;
+    for (size_t i = 0; i < ROF_FORECAST_PROBES; i++) {
+        rof_forecast_init(&ctrl->forecast[i]);
+        ctrl->forecast_result[i] = (rof_forecast_result_t){ .status = ROF_FORECAST_UNAVAILABLE, .remaining_s = 0 };
+    }
     /* SAF-10: nach jedem Start ausdrücklich aus, egal was vorher war */
     apply_duty(ctrl, 0.0f);
     return ROF_OK;
@@ -195,13 +242,20 @@ void rof_controller_snapshot(const rof_controller_t *ctrl, rof_snapshot_t *snaps
             .setpoint_max_c = ctrl->config.safety.setpoint_max_c,
             .offset_max_c = ROF_SENSOR_OFFSET_MAX_C,
             .hard_max_c = ROF_SAFETY_HARD_MAX_C,
+            .core_target_min_c = ctrl->config.core_target_min_c,
+            .core_target_max_c = ctrl->config.core_target_max_c,
         },
         .state = rof_fsm_state(&ctrl->fsm),
         .duty = ctrl->applied_duty,
         .latched_fault = rof_safety_fault(&ctrl->safety),
         .active_fault = rof_safety_active(&ctrl->safety),
         .sensor_overflow = rof_sensor_registry_overflow(reg),
+        .has_core_target = ctrl->has_core_target,
+        .core_target_c = ctrl->core_target_c,
     };
+    for (size_t i = 0; i < ROF_FORECAST_PROBES; i++) {
+        snapshot->forecast[i] = ctrl->forecast_result[i];
+    }
     snapshot->has_setpoint = rof_fsm_setpoint(&ctrl->fsm, &snapshot->setpoint_c);
 
     snapshot->roles[ROF_ROLE_UNASSIGNED].status = ROF_ROLE_STATUS_UNASSIGNED;
@@ -268,4 +322,7 @@ void rof_controller_cycle(rof_controller_t *ctrl)
     /* 5. bis 7.: Regler, letztes Wort der Sicherheitslogik (SAF-02), Ausgang */
     const float duty = requested_duty(ctrl, chamber_c, dt_s);
     apply_duty(ctrl, rof_safety_limit_duty(&ctrl->safety, duty));
+
+    /* 8. Prognose: nach dem Ausgang, sie liest nur und schaltet nichts (FC-01) */
+    update_forecasts(ctrl, chamber_status == ROF_ROLE_STATUS_OK, chamber_c, now_ms);
 }
