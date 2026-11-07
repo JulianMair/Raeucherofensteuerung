@@ -7,11 +7,12 @@
  *   4. Befehlsqueue und Regelzyklus; der lädt die Sensorzuordnung und
  *      setzt den Ausgang auf 0, der Zustand ist BEREIT
  *   5. Snapshot-Ablage, Regeltask, Statuslog
- *   6. Netzwerk: Access Point; scheitert er, regelt der Ofen ohne WLAN weiter
+ *   6. Netzwerk: Access Point und DNS; scheitert das, regelt der Ofen ohne WLAN weiter
  * Alles liegt statisch im Speicher, zur Laufzeit wird nichts angelegt.
  */
 #include "command_queue.h"
 #include "control_task.h"
+#include "dns_server.h"
 #include "ds18b20_sensors.h"
 #include "esp32_clock.h"
 #include "esp32_led_output.h"
@@ -124,5 +125,10 @@ void app_main(void)
      * Regelung (ARC-09). Den Grund eines Fehlers nennt das Log. */
     if (wifi_ap_start(CONFIG_ROF_WIFI_SSID, CONFIG_ROF_WIFI_PASSWORD) != ESP_OK) {
         ESP_LOGW(TAG, "Kein WLAN, die Regelung läuft ohne Bedienung weiter");
+        return;
+    }
+    if (dns_server_start() != ESP_OK) {
+        ESP_LOGW(TAG, "Kein DNS, die Seite öffnet sich nicht von selbst, bleibt aber unter %s erreichbar",
+                 NET_AP_IP_TEXT);
     }
 }

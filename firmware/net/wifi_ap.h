@@ -9,7 +9,9 @@
 
 #include "esp_err.h"
 
+/* Standardadresse von ESP-IDF für den Access Point, als Text und als Bytes */
 #define NET_AP_IP_TEXT "192.168.4.1"
+#define NET_AP_IP_BYTES { 192, 168, 4, 1 }
 #define NET_AP_CHANNEL 1
 #define NET_AP_MAX_CLIENTS 4
 
