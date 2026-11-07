@@ -32,6 +32,10 @@ add_executable(test_sim_oven test_sim_oven.c)
 target_link_libraries(test_sim_oven PRIVATE unity host_sim project_warnings m)
 add_test(NAME sim_oven COMMAND test_sim_oven)
 
+add_executable(test_forecast test_forecast.c)
+target_link_libraries(test_forecast PRIVATE unity rof_core project_warnings m)
+add_test(NAME forecast COMMAND test_forecast)
+
 add_executable(test_controller test_controller.c)
 target_link_libraries(test_controller PRIVATE unity rof_core platform_host project_warnings)
 add_test(NAME controller COMMAND test_controller)
