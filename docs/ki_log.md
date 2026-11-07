@@ -231,3 +231,32 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 - Zwei frühe Pushes nach der neuen Regel: nach dem LittleFS-Abbild (CI-Lauf #12) und nach der Symbolprüfung (CI-Lauf #13), beide grün.
 
 **Vom Nutzer geändert oder abgelehnt:** nichts. CI-Lauf #14 nach dem Push war grün. Der Nutzer hat M9 vor den Hardwaretests H7 und H8 begonnen; deren Ergebnisse stehen noch aus.
+
+## 2026-11-07 – M9 Weboberfläche
+
+**Modell:** Claude Opus 5.5
+
+**Von der KI erzeugt:**
+- Plan für M9 mit Rückfragen zur Kopplung von Web- und Firmware-Build, zum Offset, zu den Linien der Kurve und zu den Versionen; Prüfung der Versionen und Peer-Abhängigkeiten in der npm-Registry
+- `web/`: Preact-Projekt mit Vite, TypeScript (strict), ESLint, Vitest; Typen aus `docs/api.yaml` mit openapi-typescript
+- REST-Client mit Ergebnistyp, Liveverbindung mit Neuverbinden und Erkennen von Stille, deutsche Texte über den erzeugten Typen, Prüfung der Eingaben, Statusanzeige mit Bändern für Fehler und sicheren Zustand, Bedienung, Sensorliste mit Rolle und Offset, Livekurve mit uPlot, Layout für das Handy
+- Tests: 82 Vitest-Tests mit MSW, Fake-WebSocket und Fake-uPlot; Gegenprobe für das Erkennen von Stille
+- `gzip_web.py --max-bytes` mit drei ctests; CI-Job `web` mit Artefakt für den Firmware-Job; die Firmware schreibt `web/dist` ins LittleFS, die Platzhalterseite ist entfallen
+- Sichtprüfung im Browser bei 375 px Breite mit einem Ersatzgerät (Node-Skript im Scratchpad, nicht im Repository): Halten, sicherer Zustand, Verbindungsabbruch
+- Entscheidungen E-043 bis E-046, Glossar, Nachweise, Checkliste H9, README
+
+**Vom Nutzer entschieden:**
+- Firmware-Build bricht ohne `web/dist` ab
+- Offset in der Sensoransicht
+- Livekurve mit Temperaturen und Sollwert, ohne Tastgrad
+- bewährte Hauptversionen statt der neuesten
+- Plan für M9 ohne Änderungen freigegeben
+
+**Auffälligkeiten beim Umsetzen:**
+- npm 11.4.2 brach beim Auflösen der Abhängigkeiten mit einem internen Fehler ab. Claude hat die Lock-Datei mit npm 11.19.1 über `npx` erzeugt, ohne das globale npm zu ändern; `npm ci` funktioniert auch mit 11.4.2 (E-043).
+- Bei der Sichtprüfung fielen auf: amerikanisches Zeitformat in der Kurve, sichtbare Wiederholung der Sensor-ID in den Beschriftungen, ungleich ausgerichtete Wertelisten und ein Zeilenumbruch zwischen Zahl und Einheit. Alle vier vor dem Commit behoben.
+- macOS unterscheidet bei Dateinamen nicht zwischen Groß- und Kleinschreibung: `test/app.test.tsx` überschrieb den ersten Rauchtest `test/App.test.tsx`. Die App-Tests stehen deshalb unter `App.test.tsx`.
+- Ein `eslint-disable` für eine nicht installierte Regel und ein Typ, der `unassigned` als Rolle mit Messwert zuließ, fielen bei Lint und Typprüfung auf und wurden behoben.
+- Zwei frühe Pushes nach der Regel für neue CI-Schritte: nach dem Web-Job (CI-Lauf #15) und nach der Kopplung von Web- und Firmware-Build.
+
+**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M9 ergänzt.
