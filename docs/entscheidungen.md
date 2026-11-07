@@ -381,3 +381,78 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
   - Den Mutex mit Wartezeit nehmen: Mit Prioritätsvererbung ginge das meist schnell, aber der Regeltask könnte warten.
   - Doppelpuffer ohne Mutex: CLAUDE.md verlangt einen Mutex.
   - Eine serielle Testkonsole für Befehle schon in M7: eine Funktion außerhalb von CLAUDE.md, vom Nutzer abgelehnt.
+
+## E-037 Ergebnissuche in proto, nicht in core (M8)
+
+- **Kontext:** Der Webserver muss im Snapshot das Ergebnis seines Befehls finden. Die Funktion dafür lag in core (`rof_snapshot_command_result`), der Webserver darf core aber nie aufrufen (ARC-04).
+- **Entscheidung:** Die Suche liegt jetzt als `rof_proto_command_result()` in proto, mitsamt ihren Tests. core nutzte die Funktion selbst nicht, nur ein Test. Sie liest höchstens so viele Einträge, wie das Feld hat, auch wenn der Zähler im Snapshot kaputt wäre. Die Symbolprüfung (E-042) belegt, dass net keine Funktion aus core aufruft.
+- **Verworfen:**
+  - Die Funktion in core lassen und als harmlos betrachten: Dann gälte „ruft core nie auf“ nur mit Ausnahme, und eine Maschine könnte es nicht prüfen.
+  - Die Suche im Webserver nachbauen: doppelter Code.
+
+## E-038 Partitionen und Weboberfläche in LittleFS (M8)
+
+- **Kontext:** Die Weboberfläche kommt als gzip-Dateien aus LittleFS (NET-03). Die Standardtabelle hat nur 1 MB für die App, mit WLAN und HTTP ist die Firmware rund 900 KB groß.
+- **Entscheidung:**
+  - Eigene `firmware/partitions.csv`: NVS 24 KB, PHY, App 3 MB, LittleFS `www` 1 MB. Vom 16-MB-Flash bleibt der Rest frei.
+  - Beim Bauen komprimiert `firmware/tools/gzip_web.py` jede Datei mit gzip, ohne versteckte Dateien und mit Zeit 0 im Kopf. `joltwallet/littlefs` 1.23.1 baut daraus das Abbild, mit `littlefs-python` 0.15.0 in fester Version; `idf.py flash` schreibt es mit. In M9 kommen die Dateien aus dem Build der Oberfläche.
+  - Eingehängt wird LittleFS nur lesend und nie formatiert.
+  - Vom Nutzer gewählt: Bis M9 liegt nur eine Platzhalterseite dort, damit sich das Ausliefern und das Captive Portal schon prüfen lassen.
+  - Jede Datei geht mit `Content-Encoding: gzip` und `Cache-Control: no-cache` hinaus. Ob gehashte Dateien aus Vite länger zwischengespeichert werden dürfen, klärt M9.
+- **Verworfen:**
+  - SPIFFS oder FAT aus ESP-IDF: CLAUDE.md verlangt LittleFS.
+  - Die gz-Dateien ins Repository legen: Binärdateien, die jemand neu erzeugen müsste.
+  - Beim Ausliefern komprimieren: kostet auf dem ESP32 Zeit und Speicher bei jeder Anfrage.
+
+## E-039 HTTP-Server, REST und WebSocket (M8)
+
+- **Kontext:** Befehle gehen nur über die Queue, der Zustand nur als Snapshot-Kopie (ARC-05, ARC-07). Der Webserver darf die Regelung nie blockieren (ARC-09) und kennt nur `docs/api.yaml`.
+- **Entscheidung:**
+  - `esp_http_server` mit einem Task auf CPU 0, Priorität 5. DNS hat 4, der WebSocket-Takt 3, das Statuslog 1, der Regeltask 10 auf CPU 1.
+  - Ein Befehl: Ist der Inhalt größer als 256 Byte, gibt es sofort 413 und die Verbindung wird geschlossen. Sonst prüft proto den Inhalt mit den Grenzen aus dem Snapshot. Dann bekommt der Befehl eine laufende Nummer, die nur dieser Task vergibt, und geht ohne Warten in die Queue; ist sie voll, gibt es 503 `busy`. Danach sieht der Task alle 50 ms im Snapshot nach dem Ergebnis, höchstens 2 s, sonst 504 `timeout` mit der Nummer. Ohne Snapshot gibt es 503 `not_ready`.
+  - Weil nur ein Task alle Anfragen bedient, liegen Puffer und Snapshot-Kopie statisch im Speicher.
+  - Bekannte Schwäche: Solange ein Befehl auf sein Ergebnis wartet, normal unter 1 s, warten andere Anfragen und der WebSocket. Die Regelung berührt das nicht.
+  - Folge davon: Über HTTP liegt höchstens ein Befehl zugleich in der Queue. Eine Flut von Anfragen staut sich im Server, nicht in der Regelung; ab 8 offenen Verbindungen schließt der Server die ältesten (`lru_purge_enable`).
+  - WebSocket `/ws`: Ein Task stößt jede Sekunde mit `httpd_queue_work` an, dass der Server-Task den Zustand kodiert und an alle Clients schickt. Ein neuer Client bekommt ihn sofort. Höchstens 4 Clients; Nachrichten vom Client bis 128 Byte werden verworfen, größere schließen die Verbindung.
+  - Unbekannte Pfade außerhalb von `/api` werden mit 302 auf `http://192.168.4.1/` umgeleitet, so erkennen Handys das Captive Portal. Unbekannte Pfade unter `/api` liefern 404. Fehlt sogar die Startseite, gibt es 404 statt einer Umleitung im Kreis.
+  - Statische Pfade erlauben nur `a-z`, `A-Z`, `0-9`, `.`, `_`, `-`, `/`, kein `..` und kein `//`, höchstens 64 Zeichen (`request_path`, Host-Tests).
+  - lwIP bekommt 16 Sockets (HTTP braucht für 8 Verbindungen 11, DNS einen), Kopfzeilen dürfen 1024 Byte lang sein.
+- **Verworfen:**
+  - Asynchrone Handler mit eigenem Worker-Task: weniger Wartezeit für andere Anfragen, aber deutlich mehr Code.
+  - Eine eigene Antwort-Queue: siehe E-026.
+  - Den Zustand im WebSocket-Task kodieren: Dann müsste der Puffer bis zum Senden gegen den Server-Task geschützt werden.
+
+## E-040 DNS für das Captive Portal (M8)
+
+- **Kontext:** Beim Verbinden soll sich die Seite von selbst öffnen (NET-02). Dafür prüfen Handys eine bekannte Adresse wie `connectivitycheck.gstatic.com`.
+- **Entscheidung:**
+  - Ein eigener DNS-Server auf UDP-Port 53 beantwortet jede A-Anfrage mit 192.168.4.1, TTL 60 s. Andere Typen wie AAAA bekommen eine gültige Antwort ohne Eintrag, damit das Gerät nicht wartet.
+  - Verworfen werden Pakete unter 12 Byte, Antworten (sonst ließe sich ein Kreislauf bauen), andere Opcodes, nicht genau eine Frage, Antworten oder Autoritäten in der Anfrage, Labels über 63 Byte, Namen über 255 Byte, Kompressionszeiger und abgeschnittene Fragen. Zusätze wie EDNS werden überlesen.
+  - Die Logik ist reines C (`dns_message`) mit 17 Host-Tests; der Task ist nur Socket und Schleife.
+  - Zusätzlich meldet der DHCP-Server die Seite mit Option 114 (RFC 8910).
+- **Verworfen:**
+  - Den Beispielcode aus ESP-IDF übernehmen: Er wäre ohne eigene Tests, und jede Zeile müsste ebenso erklärt werden.
+  - Nur DHCP-Option 114: Viele Geräte werten sie noch nicht aus.
+
+## E-041 Access Point und Platzhalter-Passwort (M8)
+
+- **Kontext:** Das WLAN-Passwort kommt aus Kconfig mit einem Platzhalter als Standard (NET-04). Der Platzhalter steht öffentlich im Repository; mit ihm könnte jeder in der Nähe den Ofen steuern.
+- **Entscheidung:**
+  - WPA2-PSK, Kanal 1, höchstens 4 Geräte, SSID und Passwort aus Kconfig. Der WLAN-Treiber speichert nichts im NVS (`WIFI_STORAGE_RAM`).
+  - Vom Nutzer gewählt: Mit dem Platzhalter `bitte-aendern` startet der Access Point nicht; das Log sagt, wo das Passwort zu setzen ist. Ebenso bei einem Passwort außerhalb von 8 bis 63 Zeichen oder einer SSID außerhalb von 1 bis 32 Byte. Geprüft in reinem C (`wifi_credentials`, Host-Tests).
+  - Der ctest `kconfig_placeholder` prüft, dass der Standard in Kconfig genau der Platzhalter im Code ist. Sonst könnte jemand den Standard ändern und der Schutz griffe nicht mehr.
+  - Das Netzwerk startet nach dem Regeltask. Scheitert ein Teil, läuft die Regelung weiter, nur ohne Bedienung.
+- **Verworfen:**
+  - Mit Platzhalter und Warnung starten: bequemer, aber mit einem öffentlich bekannten Passwort.
+  - Ein leerer Standard: CLAUDE.md verlangt einen Platzhalter.
+
+## E-042 Symbolprüfung für firmware/net (M8)
+
+- **Kontext:** Der Webserver bindet keine Treiber ein und ruft core nie direkt auf (ARC-04). Die Include-Regel verbietet nur Header. Über `rof_exchange` sind die Header von core erreichbar, ein Aufruf einer core-Funktion fiele ihr nicht auf.
+- **Entscheidung:**
+  - Vom Nutzer gewählt: CI prüft nach dem Firmware-Build mit `nm`, dass kein Symbol, das `librof_net.a` braucht, von `librof_core.a`, `librof_platform_esp32.a`, `onewire_bus` oder einem `esp_driver_*` bereitgestellt wird (`test/include_rules/check_net_symbols.py`). Die Schnittmenge braucht keine Liste von Präfixen.
+  - Zwei ctests prüfen das Skript mit fertigen nm-Ausgaben. Gegenprobe am echten Build: Ein eingebauter Aufruf von `rof_controller_default_config()` wurde gemeldet.
+  - Heute braucht net 79 Symbole, aus dem Projekt nur `rof_proto_*`, `command_queue_send` und `snapshot_store_read`.
+- **Verworfen:**
+  - Nur die Durchsicht des Codes: nicht maschinell.
+  - Die Header von core für net sperren: net braucht die Typen von Snapshot und Befehl.

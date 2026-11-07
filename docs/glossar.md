@@ -111,5 +111,13 @@ In Prüfreihenfolge. Die erste Ursache, die auslöst, wird verriegelt.
 | ROM-Adresse | `rom`, als Sensor-ID `rof_sensor_id_t` |
 | Haltezeit des Tastgrads | `hold_ms` in `led_pwm_t` |
 | reiner C-Teil von platform/esp32 | `ROF_ESP32_PORTABLE_SOURCES` |
+| reiner C-Teil von firmware/net | `ROF_NET_PORTABLE_SOURCES`, Host-Bibliothek `net_portable` |
+| Access Point | `wifi_ap` |
+| Platzhalter-Passwort | `NET_WIFI_PASSWORD_PLACEHOLDER` |
+| Captive Portal (Seite öffnet sich beim Verbinden) | `dns_message`, `dns_server`, Umleitung in `http_server` |
+| statische Datei der Weboberfläche | `net_static_file_t` |
+| Livewerte über den WebSocket | `ws_live` |
+| Ergebnis eines Befehls suchen | `rof_proto_command_result()` |
+| Symbolprüfung | `check_net_symbols.py` |
 
 In der API (`docs/api.yaml`) stehen dieselben englischen Namen in Kleinbuchstaben, zum Beispiel `ROF_STATE_SAFE_STATE` als `"safe_state"` oder `ROF_ROLE_CHAMBER` als `"chamber"`.

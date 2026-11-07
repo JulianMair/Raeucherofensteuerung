@@ -2,7 +2,7 @@
 
 Steuerungssoftware für einen Räucherofen auf einem ESP32-S3. Prüfungsleistung im IU-Modul „Projekt: Software Development“. Getestet wird mit DS18B20-Sensoren und einer LED statt Heizelement, ohne Netzspannung.
 
-Stand: Meilenstein M7 (Firmware-Basis). Die vollständige Anleitung zu Bauen, Flashen und Testen folgt in M11.
+Stand: Meilenstein M8 (Netzwerk). Die vollständige Anleitung zu Bauen, Flashen und Testen folgt in M11.
 
 ## Ordner
 
@@ -80,7 +80,9 @@ Flashen und den seriellen Monitor öffnen (beenden mit Ctrl+]):
 idf.py -C firmware flash monitor
 ```
 
-Die Pins für 1-Wire-Bus (Standard GPIO 4) und LED (Standard GPIO 5) stehen in `idf.py -C firmware menuconfig` unter „Raeucherofensteuerung“. Aufbau und Prüfschritte stehen in `docs/hardwaretest.md`.
+Pins, WLAN-Name und WLAN-Passwort stehen in `idf.py -C firmware menuconfig` unter „Raeucherofensteuerung“. Das Passwort hat einen Platzhalter als Standard; mit ihm startet der Access Point nicht, die Regelung läuft dann ohne WLAN (E-041). Mit eigenem Passwort spannt der ESP32 das WLAN „Raeucherofen“ auf, die Seite ist unter `http://192.168.4.1/` erreichbar und öffnet sich beim Verbinden meist von selbst. Aufbau und Prüfschritte stehen in `docs/hardwaretest.md`.
+
+Beim Bauen wird `firmware/www/` mit gzip komprimiert und als LittleFS-Abbild in die Partition `www` geschrieben (E-038). Bis M9 liegt dort nur eine Platzhalterseite.
 
 `firmware/sdkconfig` entsteht beim ersten Bauen aus `firmware/sdkconfig.defaults` und steht nicht im Repository. Nach einer Änderung an `sdkconfig.defaults` die Datei `firmware/sdkconfig` löschen, sonst gelten die alten Werte weiter.
 
