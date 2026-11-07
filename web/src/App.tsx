@@ -1,12 +1,14 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 
 import { getLimits } from "./api/client";
 import { browserSocket, type SocketFactory } from "./api/live";
 import type { Limits } from "./api/types";
 import { ConnectionBanner } from "./components/ConnectionBanner";
 import { Controls } from "./components/Controls";
+import { LiveChart } from "./components/LiveChart";
 import { SensorList } from "./components/SensorList";
 import { StatusPanel } from "./components/StatusPanel";
+import { appendState, emptyHistory } from "./history";
 import { useLive } from "./hooks/useLive";
 import { useNow } from "./hooks/useNow";
 
@@ -16,7 +18,14 @@ interface Props {
 }
 
 export function App({ createSocket = browserSocket }: Props) {
-  const live = useLive(createSocket);
+  /* Der Verlauf liegt außerhalb des Zustands von Preact, version zeichnet neu */
+  const history = useRef(emptyHistory());
+  const [version, setVersion] = useState(0);
+  const live = useLive(createSocket, (state) => {
+    if (appendState(history.current, state, Date.now())) {
+      setVersion((v) => v + 1);
+    }
+  });
   const now = useNow(1000);
   const [limits, setLimits] = useState<Limits | null>(null);
   const stale = live.status !== "open";
@@ -36,6 +45,7 @@ export function App({ createSocket = browserSocket }: Props) {
         <>
           <StatusPanel state={live.state} stale={stale} />
           <Controls state={live.state.state} limits={limits} disabled={stale} />
+          <LiveChart history={history.current} version={version} />
           <SensorList
             channels={live.state.channels}
             overflow={live.state.sensor_overflow}
