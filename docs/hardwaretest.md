@@ -154,7 +154,7 @@ Ohne Heizelement lässt sich die Prognose nur eingeschränkt prüfen. Der Garrau
 | H10-01 | Kernziel „25“ und „120“ eingeben | Meldung „Mindestens 30 °C“ bzw. „Höchstens 100 °C“, nichts gesendet | |
 | H10-02 | Kernziel 68 setzen, ohne Kern 1 | „Fertig Kern 1: kein Fühler“ | |
 | H10-03 | Kern 1 zuordnen, Zustand BEREIT | „wartet, bis der Garraum hält“; das Statuslog zeigt `waiting` | |
-| H10-04 | Optional: Garraumfühler in Wasser von etwa 45 °C, Sollwert 45, Start, bis HALTEN; Kernfühler aus dem Kühlschrank in dasselbe Wasser | Erst „lernt noch“, nach 5 Minuten „noch ca. … min“ bis zu einem Kernziel unter 45 °C; die Restzeit sinkt mit der Zeit | |
+| H10-04 | Optional: Garraumfühler in Wasser von etwa 45 °C, Sollwert 45, Kernziel 40, Start, bis HALTEN; Kernfühler aus dem Kühlschrank in dasselbe Wasser | Erst „lernt noch“, nach 5 Minuten „noch ca. … min“; die Restzeit sinkt mit der Zeit, bei 40 °C „Ziel erreicht“ | |
 
 ## Rauchtest im Emulator
 

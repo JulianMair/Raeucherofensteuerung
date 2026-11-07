@@ -260,3 +260,33 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 - Zwei frühe Pushes nach der Regel für neue CI-Schritte: nach dem Web-Job (CI-Lauf #15) und nach der Kopplung von Web- und Firmware-Build.
 
 **Vom Nutzer geändert oder abgelehnt:** nichts. CI-Lauf #17 nach dem Push war grün. Der Nutzer hat sich für das optionale M10 entschieden; die Hardwaretests H7 bis H9 stehen noch aus.
+
+## 2026-11-07 – M10 Fertigzeit-Prognose (optional)
+
+**Modell:** Claude Opus 5.5
+
+**Von der KI erzeugt:**
+- Plan für M10 mit Rückfragen zu „fertig“, den Fühlern, dem Beginn der Prognose und der Abnahme
+- `core/forecast/rof_forecast.{h,c}`: Modell erster Ordnung, Regression über ln(T_g − T_k), Status und Restzeit; testgetrieben in zwei Schritten
+- Regelzyklus: Befehl Kernziel mit Grenzen, Prognose für Kern 1 und Kern 2 im Snapshot als Schritt 8 nach dem Ausgang
+- Tests: `test_forecast` (20), neue Fälle in `test_controller` (darunter Ausgang mit und ohne Kernziel gleich), `test_integration` gegen den Simulator mit gemessenen Abweichungen; Gegenproben
+- API (`POST /api/core-target`, `forecast`, Grenzen), Beispiel `state.json`, proto (Dekodieren, Kodieren, Namen, HTTP-Status), Route im Webserver, Zeile im Statuslog, Oberfläche (Kernziel, „noch ca. … min“), 23 neue Web-Tests
+- Behebung eines Fehlers aus M8 mit Prüfung beim Übersetzen (E-048)
+- Entscheidungen E-047 und E-048, Glossar, Nachweise, Befehlstabelle, Checkliste H10, README
+
+**Vom Nutzer entschieden:**
+- eigenes Kernziel als „fertig“
+- Prognose für Kern 1 und Kern 2
+- erst in HALTEN, nach 5 Minuten Lernzeit
+- Abnahme 10 Prozent
+- Plan für M10 ohne Änderungen freigegeben
+
+**Auffälligkeiten beim Umsetzen:**
+- Claude hat `api.yaml` und das Beispiel committet, bevor proto angepasst war; der Vertragstest war in diesem Commit rot. Bemerkt sofort danach, vor dem Push: Claude hat den Commit mit `git reset --soft` zurückgenommen und API und proto in einem grünen Commit zusammengelegt.
+- Beim Hinzufügen der Route fiel ein Fehler aus M8 auf: `esp_http_server` erlaubt standardmäßig 8 Pfade, die Firmware meldete 9 an, die Weboberfläche wäre nicht ausgeliefert worden. QEMU kann das nicht zeigen, die Hardwaretests standen noch aus. Behoben mit eigenem Commit und `_Static_assert` (E-048).
+- Ein Test in `test_forecast` hatte eine falsche Erwartung (die Zeit begann wieder bei 0); korrigiert wurde der Test.
+- Vor dem Push prüfte Claude jeden Commit einzeln und fand eine zweite Lücke: Nach dem API-Commit fehlten der Oberfläche die Texte für die neuen Ergebnisse, ihre Typprüfung wäre in drei Commits rot gewesen. Claude hat die noch nicht gepushten Commits auf einem Hilfszweig neu geordnet (Fix zuerst, die zwei Texte und Grenzen der Oberfläche in den API-Commit) und jeden Commit auf Host, Firmware und Web geprüft. Der Endstand ist derselbe.
+- Redocly fand das veraltete Beispiel für `/api/config`, die Typprüfung der Oberfläche die fehlenden Texte für die neuen Ergebnisse. Beide Prüfungen wirkten wie geplant (E-029, E-046).
+- Die Abweichungen im Simulator sind sehr klein, weil der Simulator dasselbe Modell nutzt. Claude hat darauf hingewiesen, dass das die Güte an echtem Fleisch nicht belegt (E-047).
+
+**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M10 ergänzt.
