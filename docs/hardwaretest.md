@@ -145,6 +145,17 @@ Die Schritte am Handy, das mit dem WLAN „Raeucherofen“ verbunden ist:
 | H9-10 | Handy drehen | Die Kurve passt sich der Breite an, nichts ragt über den Rand (WEB-04) | |
 | H9-11 | Offset 0,5 bei einem Sensor setzen | „Ausgeführt“, der Wert des Sensors steigt um 0,5 °C (SEN-01) | |
 
+## M10: Fertigzeit-Prognose
+
+Ohne Heizelement lässt sich die Prognose nur eingeschränkt prüfen. Der Garraum muss halten, und der Kernfühler muss sich ihm von unten nähern.
+
+| ID | Schritt | Erwartet | Ergebnis |
+|---|---|---|---|
+| H10-01 | Kernziel „25“ und „120“ eingeben | Meldung „Mindestens 30 °C“ bzw. „Höchstens 100 °C“, nichts gesendet | |
+| H10-02 | Kernziel 68 setzen, ohne Kern 1 | „Fertig Kern 1: kein Fühler“ | |
+| H10-03 | Kern 1 zuordnen, Zustand BEREIT | „wartet, bis der Garraum hält“; das Statuslog zeigt `waiting` | |
+| H10-04 | Optional: Garraumfühler in Wasser von etwa 45 °C, Sollwert 45, Start, bis HALTEN; Kernfühler aus dem Kühlschrank in dasselbe Wasser | Erst „lernt noch“, nach 5 Minuten „noch ca. … min“ bis zu einem Kernziel unter 45 °C; die Restzeit sinkt mit der Zeit | |
+
 ## Rauchtest im Emulator
 
 Claude hat die Firmware vor der Übergabe im Emulator QEMU gestartet (ESP-IDF v5.5.6, QEMU 9.2.2 von Espressif, Stand `3b339bd`). QEMU bildet die RMT-Hardware nicht nach, der 1-Wire-Bus verhält sich dort wie ein gestörter Bus.

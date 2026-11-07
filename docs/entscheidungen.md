@@ -505,3 +505,28 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
 - **Verworfen:**
   - Einen Verlauf im Gerät speichern: nicht im Umfang.
   - Ein CSS-Framework: kostet Budget und Erklärung für wenig Nutzen.
+
+## E-047 Fertigzeit-Prognose (M10)
+
+- **Kontext:** Optionales M10: aus den Messwerten schätzen, wie sich der Kern dem Garraum nähert, und als Zeitspanne ausgeben (FC-01). Der Simulator bildet den Kern erster Ordnung mit Totzeit nach (tau 1 h, 2 min).
+- **Entscheidung:**
+  - Modell erster Ordnung: `dT_k/dt = (T_g − T_k) / tau`. Dann fällt `ln(T_g − T_k)` linear mit der Steigung `−1/tau`; eine lineare Regression liefert tau, die Restzeit ist `tau · ln((T_g − T_k) / (T_g − T_ziel))`. T_g ist der Mittelwert des Garraums im Fenster, so stört die PWM-Welligkeit nicht.
+  - `core/forecast/rof_forecast` ist reines C11 ohne malloc: höchstens ein Punkt je 10 s, ein Ringpuffer von 60 Punkten (10 Minuten), Regression über alle Punkte im Fenster. Das Modul kennt die Sensorverwaltung nicht, nur ob ein Wert gültig ist.
+  - Vom Nutzer gewählt: „Fertig“ heißt ein eigenes Kernziel. Neuer Befehl `SET_CORE_TARGET`, Grenzen 30 bis 100 °C in `rof_limits_t`, abgelehnt statt begrenzt (`CORE_TARGET_TOO_LOW/HIGH`, NaN `INVALID_VALUE`). Erlaubt in jedem Zustand, weil es nicht auf die Heizung wirkt; nicht gespeichert, wie der Sollwert.
+  - Vom Nutzer gewählt: getrennte Prognose für Kern 1 und Kern 2; gelernt wird nur in HALTEN, eine Restzeit gibt es ab 5 Minuten Lernzeit. Fällt ein Fühler aus oder verlässt der Automat HALTEN, beginnt das Lernen von vorn.
+  - Zustände in Prüfreihenfolge: `unavailable`, `no_target`, `reached`, `waiting`, `learning`, `ok`, `unreachable`. Nicht erreichbar heißt: Ziel weniger als 0,5 °C unter dem Garraum, keine Annäherung oder über 24 Stunden.
+  - Die Prognose läuft als Schritt 8 nach dem Ausgang und liest nur. `test_forecast_does_not_change_the_output` belegt, dass der Ausgang mit und ohne Kernziel gleich schaltet.
+  - Abnahme (vom Nutzer gewählt): ab 10 Minuten Lernzeit höchstens 10 Prozent Abweichung, mindestens 2 Minuten Toleranz. Gemessen im Simulator mit Kernziel 70 °C bei 80 °C: +4,1 % nach 10 min (die Totzeit aus dem Aufheizen wirkt noch), +0,3 % nach 20 min, 0 % nach 40 und 60 min.
+  - In der Oberfläche: Feld „Kernziel“ in der Bedienung, „Fertig Kern 1/2“ mit „noch ca. 58 min“ oder dem Grund, warum es keine Restzeit gibt.
+- **Verworfen:**
+  - „Fertig“ als Kern nahe am Garraum: In der Praxis gart man auf ein Kernziel weit unter dem Garraum.
+  - Lineare Hochrechnung der letzten Minuten: unterschätzt die Restzeit, weil die Annäherung immer langsamer wird.
+  - Die Prognose in der Oberfläche rechnen: CLAUDE.md sieht `core/forecast` vor, und dort ist sie mit Unity und dem Simulator prüfbar.
+  - Schon beim Aufheizen eine Restzeit: Solange der Garraum steigt, passt das Modell nicht.
+- **Grenze des Modells:** Echtes Fleisch bleibt bei etwa 65 bis 75 °C oft eine Weile stehen, weil Wasser verdunstet. Die Prognose ist dann zu optimistisch und passt sich erst mit dem gleitenden Fenster an. Der Simulator kennt diesen Effekt nicht; der Test belegt das Modell und seinen Code, nicht die Güte an echtem Fleisch.
+
+## E-048 Genug Plätze für Pfade im HTTP-Server (M8, behoben in M10)
+
+- **Kontext:** `esp_http_server` erlaubt standardmäßig 8 Pfade. Seit M8 meldet die Firmware 7 API-Pfade, `/ws` und die Dateien an, also 9. Der letzte, die Dateien, wäre beim Start abgelehnt worden: keine Weboberfläche. Aufgefallen beim Hinzufügen der Route für das Kernziel; QEMU kann den HTTP-Server nicht laufen lassen, und die Hardwaretests standen noch aus.
+- **Entscheidung:** `max_uri_handlers = 16`. Die API-Pfade stehen in einem Feld mit fester Länge `API_ROUTE_COUNT`, und `_Static_assert` prüft beim Übersetzen, dass API, `/ws` und Dateien in die Grenze passen. Gegenprobe: Mit 8 bricht der Build ab.
+- **Verworfen:** Nur die Zahl erhöhen: Der nächste neue Pfad könnte wieder still scheitern.

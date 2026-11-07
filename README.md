@@ -2,7 +2,7 @@
 
 Steuerungssoftware für einen Räucherofen auf einem ESP32-S3. Prüfungsleistung im IU-Modul „Projekt: Software Development“. Getestet wird mit DS18B20-Sensoren und einer LED statt Heizelement, ohne Netzspannung.
 
-Stand: Meilenstein M9 (Weboberfläche). Die vollständige Anleitung zu Bauen, Flashen und Testen folgt in M11.
+Stand: Meilenstein M10 (Fertigzeit-Prognose, optional). Die vollständige Anleitung zu Bauen, Flashen und Testen folgt in M11.
 
 ## Ordner
 

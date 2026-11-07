@@ -125,5 +125,10 @@ In Prüfreihenfolge. Die erste Ursache, die auslöst, wird verriegelt.
 | Verlauf der Livekurve | `History`, `appendState()` |
 | Prüfung der Eingaben | `checkSetpoint()`, `checkOffset()` |
 | Größenbudget | `gzip_web.py --max-bytes` |
+| Fertigzeit-Prognose | `rof_forecast` (`core/forecast`) |
+| Kernziel | `core_target_c`, Befehl `ROF_COMMAND_SET_CORE_TARGET` |
+| Restzeit | `remaining_s` |
+| Zeitkonstante des Kerns | `tau_s` |
+| Lernzeit, Fenster | `ROF_FORECAST_MIN_SAMPLES`, `ROF_FORECAST_WINDOW` |
 
 In der API (`docs/api.yaml`) stehen dieselben englischen Namen in Kleinbuchstaben, zum Beispiel `ROF_STATE_SAFE_STATE` als `"safe_state"` oder `ROF_ROLE_CHAMBER` als `"chamber"`.

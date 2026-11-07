@@ -65,8 +65,11 @@ Ein abgelehnter Befehl ändert den Zustand nicht und meldet den Grund (`rof_cmd_
 | Stopp | nichts, OK | Ü4 | nichts, OK | nichts, OK | nichts, OK |
 | Rolle zuweisen | erlaubt | gesperrt | erlaubt | erlaubt | erlaubt |
 | Reset | Sache des Regelzyklus über `rof_safety_reset()`, danach Ü10 | | | | |
+| Kernziel (M10) | prüfen, speichern | prüfen, speichern | prüfen, speichern | prüfen, speichern | prüfen, speichern |
 
 Ein ungültiger Sollwert wird mit `SETPOINT_TOO_LOW`, `SETPOINT_TOO_HIGH` oder `SETPOINT_NOT_A_NUMBER` abgelehnt (SAF-09); der alte Sollwert bleibt. Tests: `test_valid_setpoint_is_stored`, `test_invalid_setpoint_is_rejected_with_reason`, `test_start_without_setpoint_is_rejected`, `test_start_while_heating_is_rejected`, `test_start_in_safe_state_is_rejected`, `test_stop_in_idle_does_nothing`, `test_stop_in_fault_does_nothing`, `test_stop_in_safe_state_does_nothing`, `test_output_and_roles_per_state`.
+
+Das Kernziel ist nur für die Fertigzeit-Prognose und wirkt nicht auf die Heizung, deshalb in jedem Zustand erlaubt (E-047). Abgelehnt mit `CORE_TARGET_TOO_LOW`, `CORE_TARGET_TOO_HIGH` oder `INVALID_VALUE`. Tests: `test_core_target_is_set_and_shown`, `test_core_target_outside_limits_is_rejected`, `test_core_target_can_change_while_heating`.
 
 ## Diagramm
 
