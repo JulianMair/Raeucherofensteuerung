@@ -12,5 +12,6 @@ set(ROF_NET_IDF_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/dns_server.c
     ${CMAKE_CURRENT_LIST_DIR}/http_server.c
     ${CMAKE_CURRENT_LIST_DIR}/wifi_ap.c
+    ${CMAKE_CURRENT_LIST_DIR}/ws_live.c
 )
 set(ROF_NET_INCLUDE_DIR ${CMAKE_CURRENT_LIST_DIR})

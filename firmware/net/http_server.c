@@ -3,6 +3,7 @@
 #include "api_handlers.h"
 #include "request_path.h"
 #include "wifi_ap.h"
+#include "ws_live.h"
 
 #include "esp_http_server.h"
 #include "esp_littlefs.h"
@@ -92,6 +93,10 @@ esp_err_t http_server_start(command_queue_t *queue, snapshot_store_t *store)
     /* Reihenfolge zählt: Der Server nimmt den ersten passenden Eintrag.
      * Die Dateien kommen deshalb zuletzt. */
     err = api_handlers_register(server, queue, store);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = ws_live_start(server, store);
     if (err != ESP_OK) {
         return err;
     }
