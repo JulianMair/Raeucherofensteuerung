@@ -207,6 +207,19 @@ bool rof_proto_encode_error(const char *error, bool has_seq, uint32_t seq, char 
     return finish(&w, len);
 }
 
+/* ---- Ergebnis eines Befehls (E-026, E-037) ------------------------------ */
+
+bool rof_proto_command_result(const rof_snapshot_t *snapshot, uint32_t seq, rof_cmd_result_t *result)
+{
+    for (size_t i = 0; i < snapshot->recent_count && i < ROF_CONTROLLER_RECENT_RESULTS; i++) {
+        if (snapshot->recent[i].seq == seq) {
+            *result = snapshot->recent[i].result;
+            return true;
+        }
+    }
+    return false;
+}
+
 /* ---- HTTP-Status (E-028) ------------------------------------------------ */
 
 int rof_proto_http_status(rof_cmd_result_t result)

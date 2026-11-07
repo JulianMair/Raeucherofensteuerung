@@ -234,18 +234,6 @@ void rof_controller_snapshot(const rof_controller_t *ctrl, rof_snapshot_t *snaps
     }
 }
 
-bool rof_snapshot_command_result(const rof_snapshot_t *snapshot, uint32_t seq,
-                                 rof_cmd_result_t *result)
-{
-    for (size_t i = 0; i < snapshot->recent_count; i++) {
-        if (snapshot->recent[i].seq == seq) {
-            *result = snapshot->recent[i].result;
-            return true;
-        }
-    }
-    return false;
-}
-
 void rof_controller_cycle(rof_controller_t *ctrl)
 {
     const uint64_t now_ms = rof_clock_now_ms(ctrl->io.clk);

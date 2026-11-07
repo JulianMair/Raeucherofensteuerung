@@ -660,10 +660,10 @@ static void test_snapshot_limits_follow_config(void)
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 95.0f, snap.limits.setpoint_max_c);
 }
 
-/* E-026: Ergebnisse, neuestes zuerst, und Suche nach der Nummer */
+/* E-026: Ergebnisse, neuestes zuerst. Die Suche nach der Nummer liegt in
+ * proto (E-037). */
 static void test_snapshot_command_results(void)
 {
-    rof_cmd_result_t result = ROF_CMD_OK;
     send_setpoint(1, 80.0f);
     send_setpoint(2, 200.0f);
     send_simple(3, ROF_COMMAND_STOP);
@@ -675,9 +675,8 @@ static void test_snapshot_command_results(void)
     TEST_ASSERT_EQUAL_UINT32(3, snap.recent[0].seq);
     TEST_ASSERT_EQUAL(ROF_COMMAND_STOP, snap.recent[0].type);
     TEST_ASSERT_EQUAL_UINT32(1, snap.recent[2].seq);
-    TEST_ASSERT_TRUE(rof_snapshot_command_result(&snap, 2, &result));
-    TEST_ASSERT_EQUAL(ROF_CMD_SETPOINT_TOO_HIGH, result);
-    TEST_ASSERT_FALSE(rof_snapshot_command_result(&snap, 42, &result));
+    TEST_ASSERT_EQUAL_UINT32(2, snap.recent[1].seq);
+    TEST_ASSERT_EQUAL(ROF_CMD_SETPOINT_TOO_HIGH, snap.recent[1].result);
 }
 
 /* E-026: auch über das Ende des Ringpuffers hinweg neuestes zuerst */

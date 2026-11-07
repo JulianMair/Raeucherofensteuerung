@@ -293,6 +293,39 @@ static rof_snapshot_t example_snapshot(void)
     return s;
 }
 
+/* E-026, E-037: Der Webserver findet das Ergebnis seines Befehls über die Nummer */
+static void test_command_result_is_found_by_seq(void)
+{
+    const rof_snapshot_t s = example_snapshot();
+    rof_cmd_result_t result = ROF_CMD_UNKNOWN_COMMAND;
+
+    TEST_ASSERT_TRUE(rof_proto_command_result(&s, 11, &result));
+    TEST_ASSERT_EQUAL(ROF_CMD_NO_SETPOINT, result);
+    TEST_ASSERT_TRUE(rof_proto_command_result(&s, 12, &result));
+    TEST_ASSERT_EQUAL(ROF_CMD_OK, result);
+}
+
+/* Noch nicht bearbeitet oder schon aus dem Ringpuffer gefallen */
+static void test_unknown_seq_has_no_result(void)
+{
+    rof_snapshot_t s = example_snapshot();
+    rof_cmd_result_t result = ROF_CMD_UNKNOWN_COMMAND;
+
+    TEST_ASSERT_FALSE(rof_proto_command_result(&s, 13, &result));
+    s.recent_count = 0;
+    TEST_ASSERT_FALSE(rof_proto_command_result(&s, 12, &result));
+    TEST_ASSERT_EQUAL(ROF_CMD_UNKNOWN_COMMAND, result);
+}
+
+/* Ein kaputter Zähler im Snapshot liest nicht über das Feld hinaus */
+static void test_result_lookup_respects_array_size(void)
+{
+    rof_snapshot_t s = example_snapshot();
+    s.recent_count = ROF_CONTROLLER_RECENT_RESULTS + 5;
+    rof_cmd_result_t result = ROF_CMD_UNKNOWN_COMMAND;
+    TEST_ASSERT_FALSE(rof_proto_command_result(&s, 99, &result));
+}
+
 /* Öffnet das Beispiel. Die Prüfung steht hier und nicht beim Lesen, weil
  * cppcheck nicht weiß, dass Unity bei einem Fehlschlag den Test verlässt. */
 static FILE *open_example(void)
@@ -492,6 +525,9 @@ int main(void)
     RUN_TEST(test_rejection_encoding_and_status);
     RUN_TEST(test_server_error_encoding);
     RUN_TEST(test_http_status_per_result);
+    RUN_TEST(test_command_result_is_found_by_seq);
+    RUN_TEST(test_unknown_seq_has_no_result);
+    RUN_TEST(test_result_lookup_respects_array_size);
 
     return UNITY_END();
 }

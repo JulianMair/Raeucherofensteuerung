@@ -80,6 +80,11 @@ bool rof_proto_encode_rejection(const rof_proto_result_t *rejection, char *buf, 
 bool rof_proto_encode_error(const char *error, bool has_seq, uint32_t seq, char *buf, size_t size,
                             size_t *len);
 
+/* Sucht im Snapshot das Ergebnis des Befehls mit dieser Nummer (E-026,
+ * E-037). false, wenn er (noch) nicht oder nicht mehr darin steht; *result
+ * bleibt dann unverändert. */
+bool rof_proto_command_result(const rof_snapshot_t *snapshot, uint32_t seq, rof_cmd_result_t *result);
+
 /* HTTP-Status für ein Ergebnis des Regeltasks (E-028) */
 int rof_proto_http_status(rof_cmd_result_t result);
 

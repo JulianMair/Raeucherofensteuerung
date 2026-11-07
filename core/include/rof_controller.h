@@ -134,9 +134,4 @@ void rof_controller_cycle(rof_controller_t *ctrl);
 /* Schreibt den aktuellen Zustand nach *snapshot. */
 void rof_controller_snapshot(const rof_controller_t *ctrl, rof_snapshot_t *snapshot);
 
-/* Sucht das Ergebnis des Befehls mit dieser Nummer. false, wenn es (noch)
- * nicht oder nicht mehr im Snapshot steht. */
-bool rof_snapshot_command_result(const rof_snapshot_t *snapshot, uint32_t seq,
-                                 rof_cmd_result_t *result);
-
 #endif /* ROF_CONTROLLER_H */

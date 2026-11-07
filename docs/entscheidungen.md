@@ -251,7 +251,7 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
   - core kennt nur das Interface `rof_command_source_t`, dessen `receive()` nie wartet. In M7 steckt die FreeRTOS-Queue dahinter, auf dem Host ein Ringpuffer mit 16 Plätzen.
   - Je Zyklus bearbeitet der Regelzyklus höchstens 4 Befehle, der Rest wartet. Ein überlasteter Webserver kann die Regelung so nicht verzögern.
   - Neben Sollwert, Start, Stopp, Rolle zuweisen und Reset gibt es „Offset setzen“. Ohne ihn wäre der Kalibrieroffset (SEN-01) nie einstellbar; der Nutzer hat dem Plan mit diesem Befehl zugestimmt. Rolle und Offset sind beim Heizen gesperrt, weil beides den Messwert verschiebt, nach dem geregelt wird (E-022).
-  - Vom Nutzer gewählt: Ergebnisse gehen über den Snapshot zurück. Jeder Befehl hat eine laufende Nummer. Der Regelzyklus hält die letzten 8 Ergebnisse, also zwei volle Zyklen, damit ein Absender sein Ergebnis auch dann findet, wenn mehrere Befehle in einen Zyklus fallen. `rof_snapshot_command_result()` sucht nach der Nummer.
+  - Vom Nutzer gewählt: Ergebnisse gehen über den Snapshot zurück. Jeder Befehl hat eine laufende Nummer. Der Regelzyklus hält die letzten 8 Ergebnisse, also zwei volle Zyklen, damit ein Absender sein Ergebnis auch dann findet, wenn mehrere Befehle in einen Zyklus fallen. `rof_snapshot_command_result()` sucht nach der Nummer; seit M8 liegt die Suche als `rof_proto_command_result()` in proto (E-037).
   - Der Snapshot ist eine vollständige Kopie ohne Zeiger in den Regelzyklus; nur der Sensortyp zeigt auf den konstanten Text des Treibers.
 - **Verworfen:**
   - Eine eigene Antwort-Queue: ein zweiter Weg aus dem Regeltask, und bei voller Antwort-Queue müsste er Ergebnisse verwerfen.
