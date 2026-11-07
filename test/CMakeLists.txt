@@ -134,7 +134,7 @@ add_test(NAME requirements_evidence COMMAND ${Python3_EXECUTABLE} ${CHECK_EVIDEN
 add_test(NAME requirements_evidence_detects_errors
          COMMAND ${Python3_EXECUTABLE} ${CHECK_EVIDENCE} ${CMAKE_CURRENT_SOURCE_DIR}/requirements/fixtures/bad)
 set_tests_properties(requirements_evidence_detects_errors PROPERTIES
-                     PASS_REGULAR_EXPRESSION "Nachweise fehlerhaft: 3")
+                     PASS_REGULAR_EXPRESSION "Nachweise fehlerhaft: 5")
 
 add_executable(test_json_writer test_json_writer.c)
 target_link_libraries(test_json_writer PRIVATE unity rof_proto project_warnings)

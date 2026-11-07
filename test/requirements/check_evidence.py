@@ -5,7 +5,8 @@ Aufruf:  python3 check_evidence.py [WURZEL]
 WURZEL ist das Projektverzeichnis, Standard ist das Repository dieses Skripts.
 
 Für jede Zeile einer Anforderung (| ID | Anforderung | Meilenstein | Nachweis |):
-  - Der Nachweis ist nicht leer.
+  - Der Nachweis ist nicht leer und beginnt mit einem Status aus STATUSES
+    (E-050). Die Zeile „Stand: …“ nennt genau so viele je Status.
   - Jede genannte Testfunktion `test_...` gibt es in test/*.c, entweder als
     Funktion oder als Testprogramm test/<name>.c. `test_x_*` steht für alle,
     die so beginnen; mindestens eine muss es geben.
@@ -21,6 +22,8 @@ import sys
 from pathlib import Path
 
 ROW_RE = re.compile(r"^\| ([A-Z]+-\d+) \|(.*)\|$")
+STATUSES = ("erfüllt", "erfüllt, Hardware ausstehend", "teilweise")
+SUMMARY_RE = re.compile(r"^Stand: (\d+) erfüllt, (\d+) erfüllt \(Hardware ausstehend\), (\d+) teilweise\.$", re.M)
 CODE_RE = re.compile(r"`([^`]+)`")
 TEST_RE = re.compile(r"^test_[A-Za-z0-9_]+\*?$")
 PATH_PREFIXES = ("core/", "proto/", "platform/", "firmware/", "web/", "test/", "docs/", ".github/")
@@ -56,13 +59,19 @@ def expand(path):
 
 
 def check(root):
-    doc = root / "docs" / "anforderungen.md"
+    text = (root / "docs" / "anforderungen.md").read_text()
     names = test_names(root)
     problems = []
-    for rid, evidence in requirement_rows(doc.read_text()):
+    counts = {status: 0 for status in STATUSES}
+    for rid, evidence in requirement_rows(text):
         if evidence == "":
             problems.append(f"{rid}: kein Nachweis")
             continue
+        status = next((s for s in STATUSES if evidence.startswith(s + ":")), None)
+        if status is None:
+            problems.append(f"{rid}: Nachweis ohne Status ({', '.join(STATUSES)})")
+        else:
+            counts[status] += 1
         for code in CODE_RE.findall(evidence):
             if TEST_RE.match(code):
                 if code.endswith("*"):
@@ -77,6 +86,13 @@ def check(root):
                         continue
                     if not (root / path.rstrip("/")).exists():
                         problems.append(f"{rid}: Pfad nicht gefunden: {path}")
+    summary = SUMMARY_RE.search(text)
+    expected = tuple(counts[status] for status in STATUSES)
+    if summary is None:
+        problems.append("Zusammenfassung „Stand: …“ fehlt")
+    elif tuple(int(number) for number in summary.groups()) != expected:
+        problems.append("Zusammenfassung passt nicht zur Tabelle, richtig wäre: "
+                        f"{expected[0]} erfüllt, {expected[1]} erfüllt (Hardware ausstehend), {expected[2]} teilweise")
     return problems
 
 
