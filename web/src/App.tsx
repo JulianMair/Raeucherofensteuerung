@@ -5,6 +5,7 @@ import { browserSocket, type SocketFactory } from "./api/live";
 import type { Limits } from "./api/types";
 import { ConnectionBanner } from "./components/ConnectionBanner";
 import { Controls } from "./components/Controls";
+import { SensorList } from "./components/SensorList";
 import { StatusPanel } from "./components/StatusPanel";
 import { useLive } from "./hooks/useLive";
 import { useNow } from "./hooks/useNow";
@@ -35,6 +36,13 @@ export function App({ createSocket = browserSocket }: Props) {
         <>
           <StatusPanel state={live.state} stale={stale} />
           <Controls state={live.state.state} limits={limits} disabled={stale} />
+          <SensorList
+            channels={live.state.channels}
+            overflow={live.state.sensor_overflow}
+            limits={limits}
+            locked={live.state.state === "heating" || live.state.state === "holding"}
+            disabled={stale}
+          />
         </>
       )}
     </main>
