@@ -154,6 +154,140 @@ static void test_probe_above_chamber_gives_no_estimate(void)
     TEST_ASSERT_FALSE(rof_forecast_time_constant(&fc, &tau_s));
 }
 
+/* ---- Status und Restzeit ------------------------------------------------ */
+
+/* Ein Zyklus wie im Regeltask: HALTEN, beide Fühler gültig, Ziel gesetzt */
+static rof_forecast_input_t holding_input(float chamber_c, float probe_c, float target_c)
+{
+    return (rof_forecast_input_t){ .holding = true,
+                                   .chamber_ok = true,
+                                   .chamber_c = chamber_c,
+                                   .probe_ok = true,
+                                   .probe_c = probe_c,
+                                   .has_target = true,
+                                   .target_c = target_c };
+}
+
+/* Füttert n Zyklen einer Kurve im Abstand von 10 s und liefert das letzte Ergebnis */
+static rof_forecast_result_t run_curve(size_t n, float chamber_c, float tau_s, float target_c, float *last_probe)
+{
+    rof_forecast_result_t result = { 0 };
+    for (size_t i = 0; i < n; i++) {
+        const float t_s = (float)i * 10.0f;
+        *last_probe = probe_at(chamber_c, 20.0f, tau_s, t_s);
+        const rof_forecast_input_t in = holding_input(chamber_c, *last_probe, target_c);
+        result = rof_forecast_update(&fc, &in, (uint64_t)(t_s * 1000.0f));
+    }
+    return result;
+}
+
+/* FC-01: Restzeit nach dem Modell, tau * ln((T_g - T_k) / (T_g - T_ziel)) */
+static void test_remaining_time_follows_the_model(void)
+{
+    float probe = 0.0f;
+    const rof_forecast_result_t result = run_curve(ROF_FORECAST_MIN_SAMPLES, 80.0f, 3600.0f, 70.0f, &probe);
+
+    TEST_ASSERT_EQUAL(ROF_FORECAST_OK, result.status);
+    const float expected_s = 3600.0f * logf((80.0f - probe) / (80.0f - 70.0f));
+    TEST_ASSERT_FLOAT_WITHIN(expected_s * 0.02f, expected_s, (float)result.remaining_s);
+}
+
+/* Ein Punkt weniger als nötig: lernt noch, ohne Restzeit; mit dem nächsten Punkt gibt es eine */
+static void test_learning_until_enough_samples(void)
+{
+    float probe = 0.0f;
+    const rof_forecast_result_t learning = run_curve(ROF_FORECAST_MIN_SAMPLES - 1, 80.0f, 3600.0f, 70.0f, &probe);
+    TEST_ASSERT_EQUAL(ROF_FORECAST_LEARNING, learning.status);
+    TEST_ASSERT_EQUAL_UINT32(0, learning.remaining_s);
+
+    const float t_s = (float)(ROF_FORECAST_MIN_SAMPLES - 1) * 10.0f;
+    const rof_forecast_input_t in = holding_input(80.0f, probe_at(80.0f, 20.0f, 3600.0f, t_s), 70.0f);
+    TEST_ASSERT_EQUAL(ROF_FORECAST_OK, rof_forecast_update(&fc, &in, (uint64_t)(t_s * 1000.0f)).status);
+}
+
+static void test_reached_when_probe_is_at_target(void)
+{
+    rof_forecast_input_t in = holding_input(80.0f, 68.0f, 68.0f);
+    TEST_ASSERT_EQUAL(ROF_FORECAST_REACHED, rof_forecast_update(&fc, &in, 0).status);
+
+    /* auch außerhalb von HALTEN, z. B. beim Abkühlen */
+    in.holding = false;
+    in.probe_c = 69.0f;
+    TEST_ASSERT_EQUAL(ROF_FORECAST_REACHED, rof_forecast_update(&fc, &in, 10000).status);
+}
+
+/* Ohne Ziel gibt es keine Restzeit, gelernt wird trotzdem */
+static void test_no_target_still_learns(void)
+{
+    for (size_t i = 0; i < 5; i++) {
+        rof_forecast_input_t in = holding_input(80.0f, 30.0f + (float)i, 0.0f);
+        in.has_target = false;
+        TEST_ASSERT_EQUAL(ROF_FORECAST_NO_TARGET, rof_forecast_update(&fc, &in, i * 10000u).status);
+    }
+    TEST_ASSERT_EQUAL_size_t(5, fc.count);
+}
+
+/* Außerhalb von HALTEN steigt der Garraum noch, das Modell passt nicht */
+static void test_waiting_outside_holding_and_learning_starts_over(void)
+{
+    float probe = 0.0f;
+    run_curve(ROF_FORECAST_MIN_SAMPLES, 80.0f, 3600.0f, 70.0f, &probe);
+
+    rof_forecast_input_t in = holding_input(75.0f, probe, 70.0f);
+    in.holding = false;
+    TEST_ASSERT_EQUAL(ROF_FORECAST_WAITING, rof_forecast_update(&fc, &in, 400000).status);
+    TEST_ASSERT_EQUAL_size_t(0, fc.count);
+}
+
+/* Fällt ein Fühler aus, beginnt das Lernen von vorn */
+static void test_unavailable_without_valid_sensor_values(void)
+{
+    float probe = 0.0f;
+    run_curve(ROF_FORECAST_MIN_SAMPLES, 80.0f, 3600.0f, 70.0f, &probe);
+
+    rof_forecast_input_t in = holding_input(80.0f, probe, 70.0f);
+    in.probe_ok = false;
+    TEST_ASSERT_EQUAL(ROF_FORECAST_UNAVAILABLE, rof_forecast_update(&fc, &in, 400000).status);
+    TEST_ASSERT_EQUAL_size_t(0, fc.count);
+
+    in = holding_input(80.0f, probe, 70.0f);
+    in.chamber_ok = false;
+    TEST_ASSERT_EQUAL(ROF_FORECAST_UNAVAILABLE, rof_forecast_update(&fc, &in, 410000).status);
+
+    in = holding_input(80.0f, probe, 70.0f);
+    TEST_ASSERT_EQUAL(ROF_FORECAST_LEARNING, rof_forecast_update(&fc, &in, 420000).status);
+}
+
+/* Ein Ziel am oder über dem Garraum wird nie erreicht */
+static void test_unreachable_when_target_is_not_below_chamber(void)
+{
+    float probe = 0.0f;
+    TEST_ASSERT_EQUAL(ROF_FORECAST_UNREACHABLE,
+                      run_curve(ROF_FORECAST_MIN_SAMPLES, 80.0f, 3600.0f, 79.6f, &probe).status);
+
+    rof_forecast_clear(&fc);
+    TEST_ASSERT_EQUAL(ROF_FORECAST_OK,
+                      run_curve(ROF_FORECAST_MIN_SAMPLES, 80.0f, 3600.0f, 80.0f - ROF_FORECAST_MIN_GAP_C, &probe).status);
+}
+
+static void test_unreachable_without_approach(void)
+{
+    rof_forecast_result_t result = { 0 };
+    for (size_t i = 0; i < ROF_FORECAST_MIN_SAMPLES; i++) {
+        const rof_forecast_input_t in = holding_input(80.0f, 50.0f, 70.0f);
+        result = rof_forecast_update(&fc, &in, i * 10000u);
+    }
+    TEST_ASSERT_EQUAL(ROF_FORECAST_UNREACHABLE, result.status);
+}
+
+/* Über 24 Stunden gilt als nicht erreichbar */
+static void test_unreachable_beyond_a_day(void)
+{
+    float probe = 0.0f;
+    TEST_ASSERT_EQUAL(ROF_FORECAST_UNREACHABLE,
+                      run_curve(ROF_FORECAST_MIN_SAMPLES, 80.0f, 40000.0f, 79.0f, &probe).status);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -168,5 +302,14 @@ int main(void)
     RUN_TEST(test_one_sample_is_not_enough);
     RUN_TEST(test_no_approach_gives_no_estimate);
     RUN_TEST(test_probe_above_chamber_gives_no_estimate);
+    RUN_TEST(test_remaining_time_follows_the_model);
+    RUN_TEST(test_learning_until_enough_samples);
+    RUN_TEST(test_reached_when_probe_is_at_target);
+    RUN_TEST(test_no_target_still_learns);
+    RUN_TEST(test_waiting_outside_holding_and_learning_starts_over);
+    RUN_TEST(test_unavailable_without_valid_sensor_values);
+    RUN_TEST(test_unreachable_when_target_is_not_below_chamber);
+    RUN_TEST(test_unreachable_without_approach);
+    RUN_TEST(test_unreachable_beyond_a_day);
     return UNITY_END();
 }
