@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { checkOffset, checkSetpoint } from "../src/validation";
+import { checkCoreTarget, checkOffset, checkSetpoint } from "../src/validation";
 import { exampleLimits } from "./fixtures";
 
 describe("Prüfung der Eingaben", () => {
@@ -30,6 +30,15 @@ describe("Prüfung der Eingaben", () => {
   it("schickt ohne Grenzen nichts", () => {
     expect(checkSetpoint("80", null).ok).toBe(false);
     expect(checkOffset("0", null).ok).toBe(false);
+  });
+
+  it("prüft das Kernziel gegen seine Grenzen", () => {
+    expect(checkCoreTarget("68", exampleLimits)).toEqual({ ok: true, value: 68 });
+    expect(checkCoreTarget("", exampleLimits)).toEqual({ ok: false, message: "Bitte ein Kernziel eingeben" });
+    expect(checkCoreTarget("29,5", exampleLimits)).toEqual({ ok: false, message: "Mindestens 30 °C" });
+    expect(checkCoreTarget("100,5", exampleLimits)).toEqual({ ok: false, message: "Höchstens 100 °C" });
+    expect(checkCoreTarget("x", exampleLimits)).toEqual({ ok: false, message: "Keine gültige Zahl" });
+    expect(checkCoreTarget("68", null).ok).toBe(false);
   });
 
   it("prüft den Offset gegen ±offset_max_c", () => {

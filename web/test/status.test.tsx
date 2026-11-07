@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/preact";
 import { describe, expect, it } from "vitest";
 
-import type { Fault, State } from "../src/api/types";
+import type { Fault, ForecastStatus, State } from "../src/api/types";
 import { StatusPanel } from "../src/components/StatusPanel";
-import { FAULT_LABELS, STATE_LABELS } from "../src/labels";
+import { FAULT_LABELS, FORECAST_LABELS, STATE_LABELS } from "../src/labels";
 import { stateWith } from "./fixtures";
 
 const ALL_STATES = Object.keys(STATE_LABELS) as State[];
@@ -57,6 +57,33 @@ describe("Statusanzeige", () => {
   it("zeigt ohne Sollwert einen Strich", () => {
     render(<StatusPanel state={stateWith({ setpoint_c: null })} stale={false} />);
     expect(screen.getByText("–")).toBeDefined();
+  });
+
+  /* FC-01: Kernziel und Restzeit aus dem Beispiel der API */
+  it("zeigt Kernziel und Restzeit je Kern", () => {
+    render(<StatusPanel state={stateWith({})} stale={false} />);
+
+    expect(screen.getByText("68,0 °C")).toBeDefined();
+    expect(screen.getByTestId("forecast-probe_1").textContent).toBe("noch ca. 58 min");
+    expect(screen.getByTestId("forecast-probe_2").textContent).toBe("kein Fühler");
+  });
+
+  it.each((Object.keys(FORECAST_LABELS) as ForecastStatus[]).filter((status) => status !== "ok"))(
+    "zeigt den Zustand %s der Prognose als Text",
+    (status) => {
+      render(
+        <StatusPanel
+          state={stateWith({ forecast: { probe_1: { status, remaining_s: null }, probe_2: { status, remaining_s: null } } })}
+          stale={false}
+        />,
+      );
+      expect(screen.getByTestId("forecast-probe_1").textContent).toBe(FORECAST_LABELS[status]);
+    },
+  );
+
+  it("zeigt ohne Kernziel einen Strich", () => {
+    render(<StatusPanel state={stateWith({ core_target_c: null })} stale={false} />);
+    expect(screen.getByLabelText("Fertigzeit").textContent).toContain("Kernziel–");
   });
 
   it("markiert alte Werte", () => {

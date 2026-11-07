@@ -33,6 +33,26 @@ export function checkSetpoint(text: string, limits: Limits | null): Checked {
   return { ok: true, value };
 }
 
+export function checkCoreTarget(text: string, limits: Limits | null): Checked {
+  if (limits === null) {
+    return { ok: false, message: "Grenzen noch nicht geladen" };
+  }
+  if (text.trim() === "") {
+    return { ok: false, message: "Bitte ein Kernziel eingeben" };
+  }
+  const value = parseNumber(text);
+  if (value === null) {
+    return { ok: false, message: "Keine gültige Zahl" };
+  }
+  if (value < limits.core_target_min_c) {
+    return { ok: false, message: `Mindestens ${oneDecimal.format(limits.core_target_min_c)} °C` };
+  }
+  if (value > limits.core_target_max_c) {
+    return { ok: false, message: `Höchstens ${oneDecimal.format(limits.core_target_max_c)} °C` };
+  }
+  return { ok: true, value };
+}
+
 export function checkOffset(text: string, limits: Limits | null): Checked {
   if (limits === null) {
     return { ok: false, message: "Grenzen noch nicht geladen" };

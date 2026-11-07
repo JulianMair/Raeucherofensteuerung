@@ -1,5 +1,14 @@
-import type { StateSnapshot } from "../api/types";
-import { FAULT_LABELS, formatDuty, formatTemperature, ROLE_LABELS, ROLE_STATUS_LABELS, STATE_LABELS } from "../labels";
+import type { Forecast, StateSnapshot } from "../api/types";
+import {
+  FAULT_LABELS,
+  FORECAST_LABELS,
+  formatDuration,
+  formatDuty,
+  formatTemperature,
+  ROLE_LABELS,
+  ROLE_STATUS_LABELS,
+  STATE_LABELS,
+} from "../labels";
 
 interface Props {
   state: StateSnapshot;
@@ -30,6 +39,14 @@ function FaultBand({ state }: { state: StateSnapshot }) {
   return null;
 }
 
+/* Prognose eines Kerns: Restzeit oder warum es keine gibt (FC-01) */
+function forecastText(forecast: Forecast): string {
+  if (forecast.status === "ok" && forecast.remaining_s !== null) {
+    return `noch ca. ${formatDuration(forecast.remaining_s)}`;
+  }
+  return FORECAST_LABELS[forecast.status];
+}
+
 export function StatusPanel({ state, stale }: Props) {
   return (
     <section class={stale ? "panel stale" : "panel"} aria-label="Status">
@@ -53,6 +70,14 @@ export function StatusPanel({ state, stale }: Props) {
             </dd>,
           ];
         })}
+      </dl>
+      <dl class="forecast" aria-label="Fertigzeit">
+        <dt>Kernziel</dt>
+        <dd>{formatTemperature(state.core_target_c)}</dd>
+        <dt>Fertig Kern 1</dt>
+        <dd data-testid="forecast-probe_1">{forecastText(state.forecast.probe_1)}</dd>
+        <dt>Fertig Kern 2</dt>
+        <dd data-testid="forecast-probe_2">{forecastText(state.forecast.probe_2)}</dd>
       </dl>
     </section>
   );

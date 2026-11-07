@@ -101,10 +101,44 @@ describe("Bedienung", () => {
     await waitFor(() => expect(screen.getByTestId("message").textContent).toBe("Keine Verbindung zum Gerät"));
   });
 
+  /* FC-01: Kernziel prüfen und senden */
+  function enterCoreTarget(text: string) {
+    fireEvent.input(screen.getByLabelText("Kernziel (°C)"), { target: { value: text } });
+    fireEvent.click(screen.getByRole("button", { name: "Kernziel setzen" }));
+  }
+
+  it.each(["", "abc", "29", "101"])("schickt das ungültige Kernziel %j nicht", async (text) => {
+    renderControls();
+    enterCoreTarget(text);
+
+    expect(await messageText()).not.toBe("Ausgeführt");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(requests).toEqual([]);
+  });
+
+  it("schickt ein gültiges Kernziel, auch beim Heizen", async () => {
+    server.use(http.post("/api/core-target", () => HttpResponse.json({ seq: 3, result: "ok" })));
+    renderControls("holding");
+    enterCoreTarget("68,5");
+
+    expect(await messageText()).toBe("Ausgeführt");
+    expect(requests).toEqual([{ method: "POST", path: "/api/core-target", body: { core_target_c: 68.5 } }]);
+  });
+
+  it("zeigt den Grund, wenn das Gerät das Kernziel ablehnt", async () => {
+    server.use(
+      http.post("/api/core-target", () => HttpResponse.json({ result: "core_target_too_high" }, { status: 422 })),
+    );
+    renderControls();
+    enterCoreTarget("95");
+
+    expect(await messageText()).toBe("Kernziel zu hoch");
+  });
+
   /* WEB-03: ohne Verbindung keine Befehle */
   it("sperrt alles ohne Verbindung", () => {
     renderControls("safe_state", true);
-    for (const name of ["Setzen", "Start", "Stopp", "Sicheren Zustand zurücksetzen"]) {
+    for (const name of ["Setzen", "Kernziel setzen", "Start", "Stopp", "Sicheren Zustand zurücksetzen"]) {
       expect(button(name).disabled).toBe(true);
     }
     expect(screen.getByLabelText<HTMLInputElement>("Sollwert (°C)").disabled).toBe(true);

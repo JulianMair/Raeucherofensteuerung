@@ -1,7 +1,16 @@
 // Deutsche Texte für alle Werte der API (WEB-02). Jede Tabelle ist ein
 // Record über den erzeugten Typ: Kommt in docs/api.yaml ein Wert dazu,
 // kompiliert die Oberfläche erst wieder, wenn er hier einen Text hat.
-import type { CommandResult, Fault, ReadStatus, RequestErrorCode, Role, RoleStatus, State } from "./api/types";
+import type {
+  CommandResult,
+  Fault,
+  ForecastStatus,
+  ReadStatus,
+  RequestErrorCode,
+  Role,
+  RoleStatus,
+  State,
+} from "./api/types";
 
 export const STATE_LABELS: Record<State, string> = {
   idle: "Bereit",
@@ -66,6 +75,17 @@ export const RESULT_LABELS: Record<CommandResult, string> = {
   core_target_too_high: "Kernziel zu hoch",
 };
 
+/* Fertigzeit-Prognose (FC-01); bei ok steht statt des Texts die Restzeit */
+export const FORECAST_LABELS: Record<ForecastStatus, string> = {
+  unavailable: "kein Fühler",
+  no_target: "kein Kernziel gesetzt",
+  reached: "Ziel erreicht",
+  waiting: "wartet, bis der Garraum hält",
+  learning: "lernt noch",
+  ok: "Restzeit",
+  unreachable: "Ziel so nicht erreichbar",
+};
+
 export const ERROR_LABELS: Record<RequestErrorCode, string> = {
   bad_json: "Anfrage kaputt",
   missing_field: "Feld fehlt",
@@ -84,6 +104,18 @@ const oneDecimal = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 1, ma
 /* "79,9 °C", ohne gültigen Wert ein Gedankenstrich */
 export function formatTemperature(tempC: number | null): string {
   return tempC === null ? "–" : `${oneDecimal.format(tempC)} °C`;
+}
+
+/* Restzeit gerundet auf Minuten: "1 h 05 min", "58 min", "unter 1 min" */
+export function formatDuration(seconds: number): string {
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 1) {
+    return "unter 1 min";
+  }
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+  return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")} min`;
 }
 
 /* Tastgrad 0 bis 1 als "46 %" */

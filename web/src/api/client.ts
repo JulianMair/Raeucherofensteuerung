@@ -2,6 +2,7 @@
 // Jede liefert ein Ergebnis, damit die Oberfläche jeden Fall anzeigen kann.
 import type {
   CommandResult,
+  CoreTargetRequest,
   Limits,
   OffsetRequest,
   RequestError,
@@ -57,6 +58,12 @@ async function send(method: "POST" | "PUT", path: string, body?: object): Promis
 export function setSetpoint(setpointC: number): Promise<CommandOutcome> {
   const body: SetpointRequest = { setpoint_c: setpointC };
   return send("POST", "/api/setpoint", body);
+}
+
+/* Kernziel für die Fertigzeit-Prognose (FC-01) */
+export function setCoreTarget(targetC: number): Promise<CommandOutcome> {
+  const body: CoreTargetRequest = { core_target_c: targetC };
+  return send("POST", "/api/core-target", body);
 }
 
 export function start(): Promise<CommandOutcome> {

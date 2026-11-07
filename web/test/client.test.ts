@@ -1,7 +1,7 @@
 import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 
-import { getLimits, reset, setOffset, setRole, setSetpoint, start } from "../src/api/client";
+import { getLimits, reset, setCoreTarget, setOffset, setRole, setSetpoint, start } from "../src/api/client";
 import { exampleLimits } from "./fixtures";
 import { requests, server } from "./server";
 
@@ -78,6 +78,13 @@ describe("REST-Client", () => {
       { method: "PUT", path: "/api/sensors/28AA000000000001/role", body: { role: "chamber" } },
       { method: "PUT", path: "/api/sensors/28AA000000000001/offset", body: { offset_c: -0.5 } },
     ]);
+  });
+
+  it("schickt das Kernziel als JSON", async () => {
+    server.use(http.post("/api/core-target", () => HttpResponse.json({ seq: 5, result: "ok" })));
+
+    expect(await setCoreTarget(68)).toEqual({ kind: "done", status: 200, seq: 5, result: "ok" });
+    expect(await sent()).toEqual([{ method: "POST", path: "/api/core-target", body: { core_target_c: 68 } }]);
   });
 
   it("liest die Grenzen, null wenn das Gerät noch nicht bereit ist", async () => {
