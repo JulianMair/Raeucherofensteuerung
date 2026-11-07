@@ -2,7 +2,7 @@
 
 Stand des Codes: `040e283`, gemessen am 2026-11-07 auf macOS (Apple Silicon). Dieselben Prüfungen laufen bei jedem Push in GitHub Actions (`.github/workflows/ci.yml`); der letzte Lauf vor M11 war [#18](https://github.com/JulianMair/Raeucherofensteuerung/actions/runs/42373296353) für `187ba70`, grün. Der Lauf zu M11 steht im KI-Log.
 
-Die Tests auf der echten Platine stehen noch aus (Abschnitt „Hardware“). Ihre Ergebnisse werden hier und in `docs/hardwaretest.md` nachgetragen.
+Die Tests auf der echten Platine stehen noch aus (Abschnitt „Hardware“). Ihre Ergebnisse werden hier und in `docs/hardwaretest.md` nachgetragen (E-051).
 
 ## Ergebnis auf einen Blick
 

@@ -530,3 +530,34 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
 - **Kontext:** `esp_http_server` erlaubt standardmäßig 8 Pfade. Seit M8 meldet die Firmware 7 API-Pfade, `/ws` und die Dateien an, also 9. Der letzte, die Dateien, wäre beim Start abgelehnt worden: keine Weboberfläche. Aufgefallen beim Hinzufügen der Route für das Kernziel; QEMU kann den HTTP-Server nicht laufen lassen, und die Hardwaretests standen noch aus.
 - **Entscheidung:** `max_uri_handlers = 16`. Die API-Pfade stehen in einem Feld mit fester Länge `API_ROUTE_COUNT`, und `_Static_assert` prüft beim Übersetzen, dass API, `/ws` und Dateien in die Grenze passen. Gegenprobe: Mit 8 bricht der Build ab.
 - **Verworfen:** Nur die Zahl erhöhen: Der nächste neue Pfad könnte wieder still scheitern.
+
+## E-049 Nachweise automatisch prüfen (M11)
+
+- **Kontext:** M11 verlangt den Abgleich jeder Anforderung mit ihrem Test. Die Tabelle in `docs/anforderungen.md` ist über elf Meilensteine gewachsen; Tests wurden umbenannt, Dateien verschoben. Ein Nachweis, der auf einen nicht mehr vorhandenen Test zeigt, fällt beim Lesen nicht auf.
+- **Entscheidung:** Das Skript `test/requirements/check_evidence.py` läuft als ctest `requirements_evidence` (vom Nutzer gewählt). Es prüft je Zeile, dass der Nachweis einen Status hat (E-050), dass jedes `test_…` als Funktion `static void test_…(` oder als Programm `test/<name>.c` existiert (`*` am Ende steht für ein Präfix) und dass jeder Pfad in Backticks mit bekanntem Ordner existiert. Außerdem prüft es die Zeile „Stand: …“ gegen die Zählung. Gegenprobe ist der ctest `requirements_evidence_detects_errors` mit einer kleinen kaputten Tabelle unter `test/requirements/fixtures/bad/`, der genau 5 Fehler erwartet. Beim ersten Lauf fand das Skript drei veraltete Pfade. Pfade, die erst beim Bauen entstehen oder absichtlich nicht im Repository stehen (`web/dist`, `firmware/sdkconfig`), prüft es nicht auf Existenz, denn in einem frischen Checkout wie in CI fehlen sie; die Gegenprobe enthält deshalb einen solchen Pfad in der richtigen Zeile.
+- **Verworfen:**
+  - Abgleich nur von Hand: veraltet beim nächsten Umbenennen.
+  - Tabelle aus den ID-Kommentaren der Tests erzeugen: Viele Nachweise sind keine Tests, sondern CI-Schritte oder Stellen im Code, und die Begründungen gingen verloren.
+- **Grenze:** Das Skript prüft, dass der genannte Test existiert, nicht, dass er die Anforderung wirklich belegt. Das bleibt Durchsicht.
+
+## E-050 Status der Anforderungen (M11)
+
+- **Kontext:** Viele Anforderungen sind im Code und auf dem Host belegt, ganz aber erst auf der Platine, zum Beispiel Access Point, Captive Portal und echte Sensoren. Die Hardwaretests stehen noch aus. „Erfüllt“ wäre geschönt, „offen“ unterschlüge die Host-Tests.
+- **Entscheidung:** Jeder Nachweis beginnt mit einem von drei Status:
+  - „erfüllt“: durch automatische Tests, CI oder den Code selbst belegt
+  - „erfüllt, Hardware ausstehend“: Code und Host-Tests sind da, ein Schritt in `docs/hardwaretest.md` beschreibt die fehlende Prüfung
+  - „teilweise“: ein Teil ist nirgends belegt, auch nicht durch einen geplanten Hardwaretest
+  
+  Die Zeile „Stand: …“ fasst die Zahlen zusammen, das Skript aus E-049 prüft sie. Teilweise erfüllt ist nur ARC-09; was fehlt, steht im Nachweis und in `docs/testbericht.md`.
+- **Verworfen:**
+  - Nur „ja“ oder „nein“: verdeckt den Unterschied zwischen Host-Test und Hardware.
+  - Prozentangaben je Anforderung: Scheingenauigkeit.
+  - Eine eigene Spalte für den Status: hätte die Tabelle verbreitert; ein Präfix lässt sich genauso prüfen.
+
+## E-051 Testbericht vor den Hardwaretests (M11)
+
+- **Kontext:** M11 verlangt Testbericht und Abgleich. Die Bauteile für die Hardwaretests H7 bis H10 fehlen noch.
+- **Entscheidung (vom Nutzer gewählt):** Testbericht und Abgleich jetzt, die Hardware als „ausstehend“. Die Ergebnisse kommen später in einem eigenen Commit in `docs/hardwaretest.md`, `docs/testbericht.md` und `docs/anforderungen.md`. Ein Git-Tag für die Abgabe folgt erst danach und nur auf ausdrücklichen Wunsch. Grenzen, die das Testen betreffen, stehen als Tatsachen im Testbericht; die README hat keinen Abschnitt „Grenzen und Ausblick“.
+- **Verworfen:**
+  - M11 bis nach den Hardwaretests anhalten: hätte alles andere blockiert.
+  - Die Hardware im Bericht weglassen: Anforderungen wie NET-01 lassen sich nur auf der Platine belegen.
