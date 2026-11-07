@@ -199,4 +199,4 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 - cppcheck meldete einen Fehlalarm zu einem nicht belegten Feld und einen verdeckten Namen im Test; beides vor dem Commit behoben.
 - Claude hat den CI-Job für die Firmware schon nach Commit 3 gepusht, um ihn früh zu prüfen, statt erst nach dem Meilenstein. CI-Lauf #10 war grün.
 
-**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M7 ergänzt.
+**Vom Nutzer geändert oder abgelehnt:** nichts. CI-Lauf #11 nach dem Push war grün. Der Nutzer hat M8 vor dem Hardwaretest begonnen; die Ergebnisse aus `docs/hardwaretest.md` stehen noch aus. Zum frühen Push nach Commit 3 hat Claude im Plan für M8 nachgefragt.
