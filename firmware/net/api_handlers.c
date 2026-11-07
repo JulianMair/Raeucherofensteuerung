@@ -206,23 +206,25 @@ static esp_err_t command_handler(httpd_req_t *req)
     return send_json(req, rof_proto_http_status(result), out_len);
 }
 
+static const httpd_uri_t ROUTES[] = {
+    { .uri = "/api/state", .method = HTTP_GET, .handler = state_handler },
+    { .uri = "/api/config", .method = HTTP_GET, .handler = config_handler },
+    { .uri = "/api/setpoint", .method = HTTP_POST, .handler = command_handler, .user_ctx = (void *)&KIND_SETPOINT },
+    { .uri = "/api/start", .method = HTTP_POST, .handler = command_handler, .user_ctx = (void *)&KIND_START },
+    { .uri = "/api/stop", .method = HTTP_POST, .handler = command_handler, .user_ctx = (void *)&KIND_STOP },
+    { .uri = "/api/reset", .method = HTTP_POST, .handler = command_handler, .user_ctx = (void *)&KIND_RESET },
+    { .uri = "/api/sensors/*", .method = HTTP_PUT, .handler = command_handler, .user_ctx = (void *)&KIND_SENSOR },
+};
+_Static_assert(sizeof(ROUTES) / sizeof(ROUTES[0]) == API_ROUTE_COUNT, "API_ROUTE_COUNT passt nicht zu ROUTES");
+
 esp_err_t api_handlers_register(httpd_handle_t server, command_queue_t *queue, snapshot_store_t *store)
 {
     api_queue = queue;
     api_store = store;
-    const httpd_uri_t routes[] = {
-        { .uri = "/api/state", .method = HTTP_GET, .handler = state_handler },
-        { .uri = "/api/config", .method = HTTP_GET, .handler = config_handler },
-        { .uri = "/api/setpoint", .method = HTTP_POST, .handler = command_handler, .user_ctx = (void *)&KIND_SETPOINT },
-        { .uri = "/api/start", .method = HTTP_POST, .handler = command_handler, .user_ctx = (void *)&KIND_START },
-        { .uri = "/api/stop", .method = HTTP_POST, .handler = command_handler, .user_ctx = (void *)&KIND_STOP },
-        { .uri = "/api/reset", .method = HTTP_POST, .handler = command_handler, .user_ctx = (void *)&KIND_RESET },
-        { .uri = "/api/sensors/*", .method = HTTP_PUT, .handler = command_handler, .user_ctx = (void *)&KIND_SENSOR },
-    };
-    for (size_t i = 0; i < sizeof(routes) / sizeof(routes[0]); i++) {
-        const esp_err_t err = httpd_register_uri_handler(server, &routes[i]);
+    for (size_t i = 0; i < API_ROUTE_COUNT; i++) {
+        const esp_err_t err = httpd_register_uri_handler(server, &ROUTES[i]);
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "%s nicht angemeldet (%s)", routes[i].uri, esp_err_to_name(err));
+            ESP_LOGE(TAG, "%s nicht angemeldet (%s)", ROUTES[i].uri, esp_err_to_name(err));
             return err;
         }
     }

@@ -19,6 +19,8 @@
 #define API_RESULT_TIMEOUT_MS 2000u /* danach 504, so steht es in der API */
 #define API_RESULT_POLL_MS 50u      /* so oft wird im Snapshot nachgesehen */
 #define API_SNAPSHOT_WAIT_MS 100u   /* längste Wartezeit auf den Mutex */
+/* Pfade unter /api; der HTTP-Server prüft beim Übersetzen, dass alle passen (E-039) */
+#define API_ROUTE_COUNT 7u
 
 /* Meldet alle Pfade unter /api beim Server an. Die Zeiger müssen gültig bleiben. */
 esp_err_t api_handlers_register(httpd_handle_t server, command_queue_t *queue, snapshot_store_t *store);

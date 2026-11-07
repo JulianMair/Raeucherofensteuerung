@@ -18,6 +18,8 @@
 #define HTTP_SERVER_CORE 0         /* CPU 1 bleibt dem Regeltask */
 #define HTTP_SERVER_STACK_BYTES 6144u
 #define HTTP_SERVER_MAX_SOCKETS 8  /* braucht 3 mehr in lwIP, siehe sdkconfig.defaults */
+/* Der Standard von ESP-IDF sind 8 Pfade; die API allein hat 7, dazu /ws und die Dateien */
+#define HTTP_SERVER_MAX_URI_HANDLERS 16u
 
 /* Hängt LittleFS ein, startet den Server und meldet API und Dateien an.
  * Fehlt LittleFS, läuft der Server trotzdem, nur ohne Weboberfläche. Die

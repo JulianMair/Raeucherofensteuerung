@@ -13,6 +13,10 @@
 #include <string.h>
 
 static const char *const TAG = "http";
+
+/* Jeder Pfad braucht einen Platz: die API, /ws und die Dateien ("/" mit Stern). Mit
+ * dem Standard von 8 Plätzen wäre der letzte, die Dateien, abgelehnt worden. */
+_Static_assert(API_ROUTE_COUNT + 2u <= HTTP_SERVER_MAX_URI_HANDLERS, "zu viele Pfade fuer den HTTP-Server");
 static const char START_PAGE[] = "http://" NET_AP_IP_TEXT "/";
 
 static httpd_handle_t server;
@@ -81,6 +85,7 @@ esp_err_t http_server_start(command_queue_t *queue, snapshot_store_t *store)
     config.core_id = HTTP_SERVER_CORE;
     config.stack_size = HTTP_SERVER_STACK_BYTES;
     config.max_open_sockets = HTTP_SERVER_MAX_SOCKETS;
+    config.max_uri_handlers = HTTP_SERVER_MAX_URI_HANDLERS;
     config.lru_purge_enable = true;  /* bei vollen Sockets die älteste Verbindung schließen */
     config.send_wait_timeout = 2;    /* s; ein langsamer Client hält den Server nicht lange auf */
     config.uri_match_fn = httpd_uri_match_wildcard;
