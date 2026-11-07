@@ -129,6 +129,34 @@ rof_proto_result_t rof_proto_decode_setpoint(const char *body, size_t len, const
     return r;
 }
 
+rof_proto_result_t rof_proto_decode_core_target(const char *body, size_t len, const rof_limits_t *limits,
+                                                rof_command_t *cmd)
+{
+    static const char *const allowed[] = { "core_target_c" };
+    rof_json_object_t obj;
+    rof_proto_result_t r = read_body(body, len, allowed, 1, &obj);
+    if (r.status != ROF_PROTO_OK) {
+        return r;
+    }
+    const rof_json_field_t *field;
+    r = require_field(&obj, "core_target_c", ROF_JSON_NUMBER, &field);
+    if (r.status != ROF_PROTO_OK) {
+        return r;
+    }
+    const float target_c = field->number;
+    if (!is_finite(target_c)) {
+        return out_of_range("core_target_c", ROF_CMD_INVALID_VALUE);
+    }
+    if (target_c < limits->core_target_min_c) {
+        return out_of_range("core_target_c", ROF_CMD_CORE_TARGET_TOO_LOW);
+    }
+    if (target_c > limits->core_target_max_c) {
+        return out_of_range("core_target_c", ROF_CMD_CORE_TARGET_TOO_HIGH);
+    }
+    *cmd = (rof_command_t){ .type = ROF_COMMAND_SET_CORE_TARGET, .value_c = target_c };
+    return r;
+}
+
 rof_proto_result_t rof_proto_decode_empty(rof_command_type_t type, const char *body, size_t len,
                                           rof_command_t *cmd)
 {

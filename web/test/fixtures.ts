@@ -10,6 +10,8 @@ export const exampleLimits: Limits = {
   setpoint_max_c: 110,
   offset_max_c: 5,
   hard_max_c: 120,
+  core_target_min_c: 30,
+  core_target_max_c: 100,
 };
 
 /* Kopie des Beispiels mit Änderungen, das Beispiel selbst bleibt unverändert */

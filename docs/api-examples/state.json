@@ -2,6 +2,7 @@
   "time_ms": 3600000,
   "state": "holding",
   "setpoint_c": 80.00,
+  "core_target_c": 68.00,
   "duty": 0.46,
   "latched_fault": "none",
   "active_fault": "none",
@@ -10,6 +11,10 @@
     "probe_1": { "status": "ok", "temp_c": 61.50 },
     "probe_2": { "status": "unassigned", "temp_c": null },
     "smoke_gen": { "status": "missing", "temp_c": null }
+  },
+  "forecast": {
+    "probe_1": { "status": "ok", "remaining_s": 3480 },
+    "probe_2": { "status": "unavailable", "remaining_s": null }
   },
   "channels": [
     {

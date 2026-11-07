@@ -42,6 +42,7 @@ static const char *const COMMAND_NAMES[] = {
     [ROF_COMMAND_SET_SETPOINT] = "set_setpoint", [ROF_COMMAND_START] = "start",
     [ROF_COMMAND_STOP] = "stop",                 [ROF_COMMAND_ASSIGN_ROLE] = "assign_role",
     [ROF_COMMAND_SET_OFFSET] = "set_offset",     [ROF_COMMAND_RESET] = "reset",
+    [ROF_COMMAND_SET_CORE_TARGET] = "set_core_target",
 };
 
 static const char *const RESULT_NAMES[] = {
@@ -60,6 +61,15 @@ static const char *const RESULT_NAMES[] = {
     [ROF_CMD_NOT_IN_SAFE_STATE] = "not_in_safe_state",
     [ROF_CMD_CAUSE_ACTIVE] = "cause_active",
     [ROF_CMD_UNKNOWN_COMMAND] = "unknown_command",
+    [ROF_CMD_CORE_TARGET_TOO_LOW] = "core_target_too_low",
+    [ROF_CMD_CORE_TARGET_TOO_HIGH] = "core_target_too_high",
+};
+
+static const char *const FORECAST_NAMES[] = {
+    [ROF_FORECAST_UNAVAILABLE] = "unavailable", [ROF_FORECAST_NO_TARGET] = "no_target",
+    [ROF_FORECAST_REACHED] = "reached",         [ROF_FORECAST_WAITING] = "waiting",
+    [ROF_FORECAST_LEARNING] = "learning",       [ROF_FORECAST_OK] = "ok",
+    [ROF_FORECAST_UNREACHABLE] = "unreachable",
 };
 
 #define COUNT(table) (sizeof(table) / sizeof((table)[0]))
@@ -124,4 +134,9 @@ const char *rof_proto_command_name(rof_command_type_t type)
 const char *rof_proto_result_name(rof_cmd_result_t result)
 {
     return lookup(RESULT_NAMES, COUNT(RESULT_NAMES), (int)result);
+}
+
+const char *rof_proto_forecast_status_name(rof_forecast_status_t status)
+{
+    return lookup(FORECAST_NAMES, COUNT(FORECAST_NAMES), (int)status);
 }

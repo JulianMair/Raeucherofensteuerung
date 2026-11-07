@@ -76,6 +76,8 @@ paths:
                 setpoint_max_c: 110.00
                 offset_max_c: 5.00
                 hard_max_c: 120.00
+                core_target_min_c: 30.00
+                core_target_max_c: 100.00
         '503':
           $ref: '#/components/responses/NotReady'
 
@@ -102,6 +104,38 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '409':
           $ref: '#/components/responses/CommandConflict'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '422':
+          $ref: '#/components/responses/CommandInvalid'
+        '503':
+          $ref: '#/components/responses/Busy'
+        '504':
+          $ref: '#/components/responses/Timeout'
+
+  /api/core-target:
+    post:
+      tags: [Befehle]
+      operationId: setCoreTarget
+      summary: Kernziel für die Fertigzeit-Prognose setzen
+      description: |
+        Die Prognose schätzt, wann Kern 1 und Kern 2 dieses Ziel erreichen
+        (FC-01). Das Kernziel wirkt nicht auf die Heizung und ist deshalb in
+        jedem Zustand erlaubt. Außerhalb der Grenzen wird es abgelehnt, nicht
+        begrenzt. Nach einem Neustart ist kein Kernziel gesetzt.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoreTargetRequest'
+            example:
+              core_target_c: 68
+      responses:
+        '200':
+          $ref: '#/components/responses/CommandAccepted'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '413':
           $ref: '#/components/responses/TooLarge'
         '422':
@@ -420,7 +454,7 @@ components:
 
     CommandType:
       type: string
-      enum: [set_setpoint, start, stop, assign_role, set_offset, reset]
+      enum: [set_setpoint, start, stop, assign_role, set_offset, reset, set_core_target]
 
     CommandResult:
       type: string
@@ -441,11 +475,13 @@ components:
         - not_in_safe_state
         - cause_active
         - unknown_command
+        - core_target_too_low
+        - core_target_too_high
 
     Limits:
       type: object
       additionalProperties: false
-      required: [setpoint_min_c, setpoint_max_c, offset_max_c, hard_max_c]
+      required: [setpoint_min_c, setpoint_max_c, offset_max_c, hard_max_c, core_target_min_c, core_target_max_c]
       properties:
         setpoint_min_c:
           type: number
@@ -457,6 +493,34 @@ components:
         hard_max_c:
           type: number
           description: Harte Grenze der Sicherheitslogik, nicht über die API änderbar (SAF-06)
+        core_target_min_c:
+          type: number
+          description: Erlaubter Bereich für das Kernziel (FC-01)
+        core_target_max_c:
+          type: number
+
+    ForecastStatus:
+      type: string
+      description: |
+        Zustand der Fertigzeit-Prognose eines Kernfühlers (FC-01, E-047), in
+        dieser Reihenfolge geprüft: unavailable Fühler ohne gültigen Wert,
+        no_target kein Kernziel, reached Ziel erreicht, waiting nicht in
+        HALTEN, learning noch keine 5 Minuten gelernt, ok Restzeit gültig,
+        unreachable Ziel nicht unter dem Garraum, keine Annäherung oder über
+        24 Stunden.
+      enum: [unavailable, no_target, reached, waiting, learning, ok, unreachable]
+
+    Forecast:
+      type: object
+      additionalProperties: false
+      required: [status, remaining_s]
+      properties:
+        status:
+          $ref: '#/components/schemas/ForecastStatus'
+        remaining_s:
+          type: [integer, 'null']
+          minimum: 0
+          description: Geschätzte Restzeit in Sekunden, nur bei status ok
 
     RoleReading:
       type: object
@@ -512,10 +576,12 @@ components:
         - time_ms
         - state
         - setpoint_c
+        - core_target_c
         - duty
         - latched_fault
         - active_fault
         - roles
+        - forecast
         - channels
         - sensor_overflow
         - recent_commands
@@ -527,6 +593,8 @@ components:
         state:
           $ref: '#/components/schemas/State'
         setpoint_c:
+          $ref: '#/components/schemas/Temperature'
+        core_target_c:
           $ref: '#/components/schemas/Temperature'
         duty:
           type: number
@@ -550,6 +618,16 @@ components:
               $ref: '#/components/schemas/RoleReading'
             smoke_gen:
               $ref: '#/components/schemas/RoleReading'
+        forecast:
+          type: object
+          additionalProperties: false
+          required: [probe_1, probe_2]
+          description: Fertigzeit-Prognose je Kernfühler, nur zur Anzeige (FC-01)
+          properties:
+            probe_1:
+              $ref: '#/components/schemas/Forecast'
+            probe_2:
+              $ref: '#/components/schemas/Forecast'
         channels:
           type: array
           maxItems: 8
@@ -564,6 +642,14 @@ components:
           description: Ergebnisse der letzten Befehle, neuestes zuerst (E-026)
           items:
             $ref: '#/components/schemas/CommandRecord'
+
+    CoreTargetRequest:
+      type: object
+      additionalProperties: false
+      required: [core_target_c]
+      properties:
+        core_target_c:
+          type: number
 
     SetpointRequest:
       type: object

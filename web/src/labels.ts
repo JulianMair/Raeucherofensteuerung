@@ -62,6 +62,8 @@ export const RESULT_LABELS: Record<CommandResult, string> = {
   not_in_safe_state: "Kein sicherer Zustand aktiv",
   cause_active: "Die Ursache besteht noch",
   unknown_command: "Unbekannter Befehl",
+  core_target_too_low: "Kernziel zu niedrig",
+  core_target_too_high: "Kernziel zu hoch",
 };
 
 export const ERROR_LABELS: Record<RequestErrorCode, string> = {

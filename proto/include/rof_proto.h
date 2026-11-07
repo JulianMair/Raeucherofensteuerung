@@ -47,6 +47,10 @@ typedef struct {
 rof_proto_result_t rof_proto_decode_setpoint(const char *body, size_t len, const rof_limits_t *limits,
                                              rof_command_t *cmd);
 
+/* POST /api/core-target mit {"core_target_c": Zahl} (FC-01) */
+rof_proto_result_t rof_proto_decode_core_target(const char *body, size_t len, const rof_limits_t *limits,
+                                                rof_command_t *cmd);
+
 /* POST /api/start, /api/stop, /api/reset: kein Inhalt oder {} */
 rof_proto_result_t rof_proto_decode_empty(rof_command_type_t type, const char *body, size_t len,
                                           rof_command_t *cmd);
@@ -107,5 +111,6 @@ const char *rof_proto_fault_name(rof_fault_t fault);
 const char *rof_proto_read_status_name(rof_status_t status);
 const char *rof_proto_command_name(rof_command_type_t type);
 const char *rof_proto_result_name(rof_cmd_result_t result);
+const char *rof_proto_forecast_status_name(rof_forecast_status_t status);
 
 #endif /* ROF_PROTO_H */

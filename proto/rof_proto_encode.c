@@ -31,6 +31,22 @@ static void write_role(rof_json_writer_t *w, rof_role_t role, const rof_role_sna
     rof_json_object_end(w);
 }
 
+/* Prognose eines Kernfühlers: Restzeit nur bei ok, sonst null (FC-01) */
+static void write_forecast(rof_json_writer_t *w, const char *probe, const rof_forecast_result_t *forecast)
+{
+    rof_json_key(w, probe);
+    rof_json_object_begin(w);
+    rof_json_key(w, "status");
+    rof_json_string(w, rof_proto_forecast_status_name(forecast->status));
+    rof_json_key(w, "remaining_s");
+    if (forecast->status == ROF_FORECAST_OK) {
+        rof_json_uint(w, forecast->remaining_s);
+    } else {
+        rof_json_null(w);
+    }
+    rof_json_object_end(w);
+}
+
 static void write_channel(rof_json_writer_t *w, const rof_channel_snapshot_t *ch)
 {
     char id[ROF_PROTO_SENSOR_ID_LEN + 1];
@@ -104,6 +120,8 @@ bool rof_proto_encode_state(const rof_snapshot_t *snapshot, char *buf, size_t si
     rof_json_string(&w, rof_proto_state_name(s->state));
     rof_json_key(&w, "setpoint_c");
     write_temperature(&w, s->has_setpoint, s->setpoint_c);
+    rof_json_key(&w, "core_target_c");
+    write_temperature(&w, s->has_core_target, s->core_target_c);
     rof_json_key(&w, "duty");
     rof_json_number(&w, s->duty, 2);
     rof_json_key(&w, "latched_fault");
@@ -116,6 +134,12 @@ bool rof_proto_encode_state(const rof_snapshot_t *snapshot, char *buf, size_t si
     for (int role = ROF_ROLE_UNASSIGNED + 1; role < ROF_ROLE_COUNT; role++) {
         write_role(&w, (rof_role_t)role, &s->roles[role]);
     }
+    rof_json_object_end(&w);
+
+    rof_json_key(&w, "forecast");
+    rof_json_object_begin(&w);
+    write_forecast(&w, "probe_1", &s->forecast[0]);
+    write_forecast(&w, "probe_2", &s->forecast[1]);
     rof_json_object_end(&w);
 
     rof_json_key(&w, "channels");
@@ -152,6 +176,10 @@ bool rof_proto_encode_limits(const rof_limits_t *limits, char *buf, size_t size,
     rof_json_number(&w, limits->offset_max_c, 2);
     rof_json_key(&w, "hard_max_c");
     rof_json_number(&w, limits->hard_max_c, 2);
+    rof_json_key(&w, "core_target_min_c");
+    rof_json_number(&w, limits->core_target_min_c, 2);
+    rof_json_key(&w, "core_target_max_c");
+    rof_json_number(&w, limits->core_target_max_c, 2);
     rof_json_object_end(&w);
     return finish(&w, len);
 }
@@ -240,6 +268,8 @@ int rof_proto_http_status(rof_cmd_result_t result)
     case ROF_CMD_SETPOINT_NOT_A_NUMBER:
     case ROF_CMD_UNKNOWN_SENSOR:
     case ROF_CMD_INVALID_VALUE:
+    case ROF_CMD_CORE_TARGET_TOO_LOW:
+    case ROF_CMD_CORE_TARGET_TOO_HIGH:
         return 422; /* Wert außerhalb der Grenzen oder unbekannt */
     case ROF_CMD_STORAGE_ERROR:
         return 500;

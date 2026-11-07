@@ -21,6 +21,8 @@ void setUp(void)
         .setpoint_max_c = 110.0f,
         .offset_max_c = 5.0f,
         .hard_max_c = 120.0f,
+        .core_target_min_c = 30.0f,
+        .core_target_max_c = 100.0f,
     };
 }
 
@@ -39,6 +41,49 @@ static rof_proto_result_t role(const char *id, const char *body)
 static rof_proto_result_t offset(const char *id, const char *body)
 {
     return rof_proto_decode_offset(id, body, strlen(body), &limits, &cmd);
+}
+
+static rof_proto_result_t core_target(const char *body)
+{
+    return rof_proto_decode_core_target(body, strlen(body), &limits, &cmd);
+}
+
+/* ---- Kernziel (FC-01, E-047) -------------------------------------------- */
+
+static void test_core_target_is_decoded(void)
+{
+    TEST_ASSERT_EQUAL(ROF_PROTO_OK, core_target("{\"core_target_c\": 68.5}").status);
+    TEST_ASSERT_EQUAL(ROF_COMMAND_SET_CORE_TARGET, cmd.type);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 68.5f, cmd.value_c);
+}
+
+/* Außerhalb der Grenzen mit demselben Grund wie im Regeltask */
+static void test_core_target_outside_limits_is_rejected_with_reason(void)
+{
+    rof_proto_result_t r = core_target("{\"core_target_c\": 29.9}");
+    TEST_ASSERT_EQUAL(ROF_PROTO_OUT_OF_RANGE, r.status);
+    TEST_ASSERT_EQUAL(ROF_CMD_CORE_TARGET_TOO_LOW, r.result);
+
+    r = core_target("{\"core_target_c\": 100.1}");
+    TEST_ASSERT_EQUAL(ROF_CMD_CORE_TARGET_TOO_HIGH, r.result);
+
+    r = core_target("{\"core_target_c\": 1e39}"); /* wird beim Umrechnen unendlich */
+    TEST_ASSERT_EQUAL(ROF_PROTO_OUT_OF_RANGE, r.status);
+    TEST_ASSERT_EQUAL(ROF_CMD_INVALID_VALUE, r.result);
+}
+
+static void test_core_target_request_errors_are_named(void)
+{
+    rof_proto_result_t r = core_target("{}");
+    TEST_ASSERT_EQUAL(ROF_PROTO_MISSING_FIELD, r.status);
+    TEST_ASSERT_EQUAL_STRING("core_target_c", r.field);
+
+    r = core_target("{\"core_target_c\": \"68\"}");
+    TEST_ASSERT_EQUAL(ROF_PROTO_WRONG_TYPE, r.status);
+
+    r = core_target("{\"setpoint_c\": 68}");
+    TEST_ASSERT_EQUAL(ROF_PROTO_UNKNOWN_FIELD, r.status);
+    TEST_ASSERT_EQUAL_STRING("setpoint_c", r.field);
 }
 
 /* ---- Sollwert ----------------------------------------------------------- */
@@ -232,16 +277,22 @@ static void test_names_match_api_description(void)
     for (int i = 0; i < 9; i++) {
         TEST_ASSERT_EQUAL_STRING(faults[i], rof_proto_fault_name((rof_fault_t)i));
     }
-    const char *commands[] = { "set_setpoint", "start", "stop", "assign_role", "set_offset", "reset" };
-    for (int i = 0; i < 6; i++) {
+    const char *commands[] = { "set_setpoint", "start", "stop", "assign_role", "set_offset", "reset",
+                               "set_core_target" };
+    for (int i = 0; i < 7; i++) {
         TEST_ASSERT_EQUAL_STRING(commands[i], rof_proto_command_name((rof_command_type_t)(i + 1)));
     }
     const char *results[] = { "ok", "no_setpoint", "already_running", "fault_active", "safe_state",
                               "setpoint_too_low", "setpoint_too_high", "setpoint_not_a_number",
                               "sensors_locked", "unknown_sensor", "invalid_value", "storage_error",
-                              "not_in_safe_state", "cause_active", "unknown_command" };
-    for (int i = 0; i < 15; i++) {
+                              "not_in_safe_state", "cause_active", "unknown_command",
+                              "core_target_too_low", "core_target_too_high" };
+    for (int i = 0; i < 17; i++) {
         TEST_ASSERT_EQUAL_STRING(results[i], rof_proto_result_name((rof_cmd_result_t)i));
+    }
+    const char *forecasts[] = { "unavailable", "no_target", "reached", "waiting", "learning", "ok", "unreachable" };
+    for (int i = 0; i < 7; i++) {
+        TEST_ASSERT_EQUAL_STRING(forecasts[i], rof_proto_forecast_status_name((rof_forecast_status_t)i));
     }
     TEST_ASSERT_EQUAL_STRING("ok", rof_proto_read_status_name(ROF_OK));
     TEST_ASSERT_EQUAL_STRING("not_found", rof_proto_read_status_name(ROF_ERR_NOT_FOUND));
@@ -255,6 +306,7 @@ static void test_values_outside_lists_are_unknown(void)
     TEST_ASSERT_EQUAL_STRING("unknown", rof_proto_state_name((rof_state_t)99));
     TEST_ASSERT_EQUAL_STRING("unknown", rof_proto_command_name((rof_command_type_t)0));
     TEST_ASSERT_EQUAL_STRING("unknown", rof_proto_result_name((rof_cmd_result_t)99));
+    TEST_ASSERT_EQUAL_STRING("unknown", rof_proto_forecast_status_name((rof_forecast_status_t)99));
 }
 
 /* ---- Kodieren ----------------------------------------------------------- */
@@ -290,6 +342,10 @@ static rof_snapshot_t example_snapshot(void)
     s.recent_count = 2;
     s.recent[0] = (rof_command_record_t){ 12, ROF_COMMAND_SET_SETPOINT, ROF_CMD_OK };
     s.recent[1] = (rof_command_record_t){ 11, ROF_COMMAND_START, ROF_CMD_NO_SETPOINT };
+    s.has_core_target = true;
+    s.core_target_c = 68.0f;
+    s.forecast[0] = (rof_forecast_result_t){ ROF_FORECAST_OK, 3480 };
+    s.forecast[1] = (rof_forecast_result_t){ ROF_FORECAST_UNAVAILABLE, 0 };
     return s;
 }
 
@@ -379,6 +435,19 @@ static void test_state_without_setpoint_is_null(void)
     TEST_ASSERT_NOT_NULL(strstr(out, "\"setpoint_c\":null"));
 }
 
+/* Ohne Kernziel steht null; eine Restzeit gibt es nur bei ok (FC-01) */
+static void test_forecast_without_target_or_time_is_null(void)
+{
+    rof_snapshot_t s = example_snapshot();
+    s.has_core_target = false;
+    s.forecast[0] = (rof_forecast_result_t){ ROF_FORECAST_LEARNING, 0 };
+
+    TEST_ASSERT_TRUE(rof_proto_encode_state(&s, out, sizeof(out), &out_len));
+
+    TEST_ASSERT_NOT_NULL(strstr(out, "\"core_target_c\":null"));
+    TEST_ASSERT_NOT_NULL(strstr(out, "\"probe_1\":{\"status\":\"learning\",\"remaining_s\":null}"));
+}
+
 /* Ein doppelter Kanal hat keinen gültigen Wert */
 static void test_duplicate_channel_temperature_is_null(void)
 {
@@ -422,7 +491,9 @@ static void test_limits_encoding(void)
 {
     TEST_ASSERT_TRUE(rof_proto_encode_limits(&limits, out, sizeof(out), &out_len));
     TEST_ASSERT_EQUAL_STRING(
-        "{\"setpoint_min_c\":20.00,\"setpoint_max_c\":110.00,\"offset_max_c\":5.00,\"hard_max_c\":120.00}", out);
+        "{\"setpoint_min_c\":20.00,\"setpoint_max_c\":110.00,\"offset_max_c\":5.00,\"hard_max_c\":120.00,"
+        "\"core_target_min_c\":30.00,\"core_target_max_c\":100.00}",
+        out);
 }
 
 static void test_command_response_encoding(void)
@@ -481,7 +552,8 @@ static void test_http_status_per_result(void)
     }
     const rof_cmd_result_t invalid[] = { ROF_CMD_SETPOINT_TOO_LOW, ROF_CMD_SETPOINT_TOO_HIGH,
                                          ROF_CMD_SETPOINT_NOT_A_NUMBER, ROF_CMD_UNKNOWN_SENSOR,
-                                         ROF_CMD_INVALID_VALUE };
+                                         ROF_CMD_INVALID_VALUE, ROF_CMD_CORE_TARGET_TOO_LOW,
+                                         ROF_CMD_CORE_TARGET_TOO_HIGH };
     for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) {
         TEST_ASSERT_EQUAL_INT(422, rof_proto_http_status(invalid[i]));
     }
@@ -494,6 +566,9 @@ int main(void)
     UNITY_BEGIN();
 
     RUN_TEST(test_setpoint_is_decoded);
+    RUN_TEST(test_core_target_is_decoded);
+    RUN_TEST(test_core_target_outside_limits_is_rejected_with_reason);
+    RUN_TEST(test_core_target_request_errors_are_named);
     RUN_TEST(test_broken_json_is_bad_json);
     RUN_TEST(test_missing_field_is_named);
     RUN_TEST(test_wrong_type_is_named);
@@ -517,6 +592,7 @@ int main(void)
 
     RUN_TEST(test_state_matches_api_example);
     RUN_TEST(test_state_without_setpoint_is_null);
+    RUN_TEST(test_forecast_without_target_or_time_is_null);
     RUN_TEST(test_duplicate_channel_temperature_is_null);
     RUN_TEST(test_largest_state_fits);
     RUN_TEST(test_state_reports_too_small_buffer);
