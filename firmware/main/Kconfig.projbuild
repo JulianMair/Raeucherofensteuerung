@@ -18,4 +18,19 @@ menu "Raeucherofensteuerung"
             eingebaute RGB-LED der DevKitC-1 ist adressierbar und eignet
             sich nicht.
 
+    config ROF_WIFI_SSID
+        string "Name des WLANs (SSID)"
+        default "Raeucherofen"
+        help
+            1 bis 32 Zeichen.
+
+    config ROF_WIFI_PASSWORD
+        string "WLAN-Passwort (WPA2, 8 bis 63 Zeichen)"
+        default "bitte-aendern"
+        help
+            Der Standard ist ein Platzhalter und steht oeffentlich im
+            Repository. Mit ihm startet der Access Point nicht, die
+            Regelung laeuft dann ohne WLAN. Das echte Passwort steht nur
+            in firmware/sdkconfig, und diese Datei ist nicht im Repository.
+
 endmenu

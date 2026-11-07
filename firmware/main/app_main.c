@@ -7,6 +7,7 @@
  *   4. Befehlsqueue und Regelzyklus; der lädt die Sensorzuordnung und
  *      setzt den Ausgang auf 0, der Zustand ist BEREIT
  *   5. Snapshot-Ablage, Regeltask, Statuslog
+ *   6. Netzwerk: Access Point; scheitert er, regelt der Ofen ohne WLAN weiter
  * Alles liegt statisch im Speicher, zur Laufzeit wird nichts angelegt.
  */
 #include "command_queue.h"
@@ -21,6 +22,7 @@
 #include "rof_slow_pwm.h"
 #include "snapshot_store.h"
 #include "status_log.h"
+#include "wifi_ap.h"
 
 #include "esp_err.h"
 #include "esp_log.h"
@@ -117,4 +119,10 @@ void app_main(void)
     status_log_start(&store, &control);
     ESP_LOGI(TAG, "Regelung läuft: 1-Wire an GPIO %d, LED an GPIO %d", CONFIG_ROF_ONEWIRE_GPIO,
              CONFIG_ROF_LED_GPIO);
+
+    /* 6. Erst nach dem Regeltask: Das Netzwerk hat keinen Einfluss auf die
+     * Regelung (ARC-09). Den Grund eines Fehlers nennt das Log. */
+    if (wifi_ap_start(CONFIG_ROF_WIFI_SSID, CONFIG_ROF_WIFI_PASSWORD) != ESP_OK) {
+        ESP_LOGW(TAG, "Kein WLAN, die Regelung läuft ohne Bedienung weiter");
+    }
 }

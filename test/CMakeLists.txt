@@ -60,6 +60,14 @@ add_executable(test_dns_message test_dns_message.c)
 target_link_libraries(test_dns_message PRIVATE unity net_portable project_warnings)
 add_test(NAME dns_message COMMAND test_dns_message)
 
+add_executable(test_wifi_credentials test_wifi_credentials.c)
+target_link_libraries(test_wifi_credentials PRIVATE unity net_portable project_warnings)
+add_test(NAME wifi_credentials COMMAND test_wifi_credentials)
+add_test(NAME kconfig_placeholder
+         COMMAND ${CMAKE_COMMAND} -DKCONFIG=${PROJECT_SOURCE_DIR}/firmware/main/Kconfig.projbuild
+                 -DHEADER=${PROJECT_SOURCE_DIR}/firmware/net/wifi_credentials.h
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/kconfig_placeholder.cmake)
+
 # Include-Regeln (CI-02): Prüfung des echten Projekts plus Gegenproben.
 # Jede Gegenprobe ist ein kleiner Ordner mit einem absichtlichen Verstoß.
 # Sie besteht nur, wenn genau die erwartete Meldung erscheint.

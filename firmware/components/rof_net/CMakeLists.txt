@@ -5,6 +5,6 @@ include(${CMAKE_CURRENT_LIST_DIR}/../../net/sources.cmake)
 
 idf_component_register(SRCS ${ROF_NET_PORTABLE_SOURCES} ${ROF_NET_IDF_SOURCES}
                        INCLUDE_DIRS ${ROF_NET_INCLUDE_DIR}
-                       REQUIRES rof_proto rof_exchange)
+                       REQUIRES rof_proto rof_exchange esp_wifi esp_netif esp_event)
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror)
