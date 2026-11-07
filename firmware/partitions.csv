@@ -1,0 +1,6 @@
+# Partitionen im 16-MB-Flash (E-038). Die Offsets rechnet ESP-IDF aus.
+# Name,   Type, SubType,  Offset, Size
+nvs,      data, nvs,      ,       0x6000
+phy_init, data, phy,      ,       0x1000
+factory,  app,  factory,  ,       3M
+www,      data, littlefs, ,       1M
