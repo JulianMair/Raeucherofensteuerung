@@ -127,6 +127,15 @@ add_test(NAME gzip_web_missing_source
          COMMAND ${Python3_EXECUTABLE} ${GZIP_WEB} ${CMAKE_CURRENT_SOURCE_DIR}/gzip_web/fehlt ${CMAKE_CURRENT_BINARY_DIR}/gzip_none)
 set_tests_properties(gzip_web_missing_source PROPERTIES PASS_REGULAR_EXPRESSION "Ordner der Weboberfläche fehlt")
 
+# Abgleich der Anforderungen mit ihren Tests (M11, E-049): Jeder Nachweis in
+# docs/anforderungen.md muss auf einen vorhandenen Test oder eine Datei zeigen.
+set(CHECK_EVIDENCE ${CMAKE_CURRENT_SOURCE_DIR}/requirements/check_evidence.py)
+add_test(NAME requirements_evidence COMMAND ${Python3_EXECUTABLE} ${CHECK_EVIDENCE} ${PROJECT_SOURCE_DIR})
+add_test(NAME requirements_evidence_detects_errors
+         COMMAND ${Python3_EXECUTABLE} ${CHECK_EVIDENCE} ${CMAKE_CURRENT_SOURCE_DIR}/requirements/fixtures/bad)
+set_tests_properties(requirements_evidence_detects_errors PROPERTIES
+                     PASS_REGULAR_EXPRESSION "Nachweise fehlerhaft: 3")
+
 add_executable(test_json_writer test_json_writer.c)
 target_link_libraries(test_json_writer PRIVATE unity rof_proto project_warnings)
 add_test(NAME json_writer COMMAND test_json_writer)
