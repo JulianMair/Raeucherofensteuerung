@@ -7,7 +7,7 @@
  *   4. Befehlsqueue und Regelzyklus; der lädt die Sensorzuordnung und
  *      setzt den Ausgang auf 0, der Zustand ist BEREIT
  *   5. Snapshot-Ablage, Regeltask, Statuslog
- *   6. Netzwerk: Access Point und DNS; scheitert das, regelt der Ofen ohne WLAN weiter
+ *   6. Netzwerk: Access Point, DNS, HTTP; scheitert das, regelt der Ofen ohne Bedienung weiter
  * Alles liegt statisch im Speicher, zur Laufzeit wird nichts angelegt.
  */
 #include "command_queue.h"
@@ -19,6 +19,7 @@
 #include "esp32_log.h"
 #include "esp32_nvs_storage.h"
 #include "esp32_onewire_bus.h"
+#include "http_server.h"
 #include "rof_controller.h"
 #include "rof_slow_pwm.h"
 #include "snapshot_store.h"
@@ -130,5 +131,8 @@ void app_main(void)
     if (dns_server_start() != ESP_OK) {
         ESP_LOGW(TAG, "Kein DNS, die Seite öffnet sich nicht von selbst, bleibt aber unter %s erreichbar",
                  NET_AP_IP_TEXT);
+    }
+    if (http_server_start() != ESP_OK) {
+        ESP_LOGW(TAG, "Kein HTTP-Server, die Regelung läuft ohne Bedienung weiter");
     }
 }

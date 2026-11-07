@@ -15,3 +15,9 @@ CONFIG_ESP_TASK_WDT_TIMEOUT_S=5
 # Eigene Partitionstabelle mit LittleFS für die Weboberfläche (E-038)
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Netzwerk (E-039): Der HTTP-Server braucht für 8 Verbindungen 11 Sockets,
+# der DNS-Server einen. Handys schicken bei der Prüfung auf ein Captive
+# Portal lange Kopfzeilen.
+CONFIG_LWIP_MAX_SOCKETS=16
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
