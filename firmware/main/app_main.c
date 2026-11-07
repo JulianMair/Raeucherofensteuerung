@@ -132,7 +132,7 @@ void app_main(void)
         ESP_LOGW(TAG, "Kein DNS, die Seite öffnet sich nicht von selbst, bleibt aber unter %s erreichbar",
                  NET_AP_IP_TEXT);
     }
-    if (http_server_start() != ESP_OK) {
+    if (http_server_start(&queue, &store) != ESP_OK) {
         ESP_LOGW(TAG, "Kein HTTP-Server, die Regelung läuft ohne Bedienung weiter");
     }
 }

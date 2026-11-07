@@ -9,6 +9,9 @@
 #ifndef HTTP_SERVER_H
 #define HTTP_SERVER_H
 
+#include "command_queue.h"
+#include "snapshot_store.h"
+
 #include "esp_err.h"
 
 #define HTTP_SERVER_PRIORITY 5u
@@ -16,8 +19,9 @@
 #define HTTP_SERVER_STACK_BYTES 6144u
 #define HTTP_SERVER_MAX_SOCKETS 8  /* braucht 3 mehr in lwIP, siehe sdkconfig.defaults */
 
-/* Hängt LittleFS ein und startet den Server. Fehlt LittleFS, läuft der
- * Server trotzdem, nur ohne Weboberfläche. */
-esp_err_t http_server_start(void);
+/* Hängt LittleFS ein, startet den Server und meldet API und Dateien an.
+ * Fehlt LittleFS, läuft der Server trotzdem, nur ohne Weboberfläche. Die
+ * Zeiger müssen gültig bleiben. */
+esp_err_t http_server_start(command_queue_t *queue, snapshot_store_t *store);
 
 #endif /* HTTP_SERVER_H */

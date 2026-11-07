@@ -1,5 +1,6 @@
 #include "http_server.h"
 
+#include "api_handlers.h"
 #include "request_path.h"
 #include "wifi_ap.h"
 
@@ -67,7 +68,7 @@ static esp_err_t static_file_handler(httpd_req_t *req)
     return httpd_resp_send_chunk(req, NULL, 0);
 }
 
-esp_err_t http_server_start(void)
+esp_err_t http_server_start(command_queue_t *queue, snapshot_store_t *store)
 {
     const esp_err_t mounted = mount_web_files();
     if (mounted != ESP_OK) {
@@ -90,6 +91,10 @@ esp_err_t http_server_start(void)
 
     /* Reihenfolge zählt: Der Server nimmt den ersten passenden Eintrag.
      * Die Dateien kommen deshalb zuletzt. */
+    err = api_handlers_register(server, queue, store);
+    if (err != ESP_OK) {
+        return err;
+    }
     const httpd_uri_t files = { .uri = "/*", .method = HTTP_GET, .handler = static_file_handler };
     err = httpd_register_uri_handler(server, &files);
     if (err != ESP_OK) {
