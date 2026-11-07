@@ -2,7 +2,7 @@
 
 Steuerungssoftware für einen Räucherofen auf einem ESP32-S3. Prüfungsleistung im IU-Modul „Projekt: Software Development“. Getestet wird mit DS18B20-Sensoren und einer LED statt Heizelement, ohne Netzspannung.
 
-Stand: Meilenstein M8 (Netzwerk). Die vollständige Anleitung zu Bauen, Flashen und Testen folgt in M11.
+Stand: Meilenstein M9 (Weboberfläche). Die vollständige Anleitung zu Bauen, Flashen und Testen folgt in M11.
 
 ## Ordner
 
@@ -52,6 +52,32 @@ npx --yes @redocly/cli@2.64.0 lint docs/api.yaml
 
 Dieselben Schritte laufen in CI (`.github/workflows/ci.yml`) bei jedem Push. Lokal misst Apples `gcov` (LLVM), in CI misst GCC; maßgeblich ist CI.
 
+## Weboberfläche
+
+Preact, TypeScript und Vite in `web/`, Node 24. Die Typen der API erzeugt `openapi-typescript` bei jedem Lauf aus `docs/api.yaml`.
+
+```bash
+npm --prefix web ci
+```
+
+```bash
+npm --prefix web run lint
+```
+
+```bash
+npm --prefix web run typecheck
+```
+
+```bash
+npm --prefix web test
+```
+
+```bash
+npm --prefix web run build
+```
+
+`npm --prefix web run dev` startet einen Entwicklungsserver, der `/api` und `/ws` an das Gerät unter 192.168.4.1 weiterleitet, wenn der Rechner mit dessen WLAN verbunden ist. Wer Pakete hinzufügt oder ändert, nimmt `npx npm@11.19.1 install`, siehe E-043.
+
 ## Firmware
 
 Gebaut wird mit ESP-IDF v5.5.6, derselben Version wie in CI (E-031). Einmalig installieren, rund 2 GB:
@@ -82,7 +108,7 @@ idf.py -C firmware flash monitor
 
 Pins, WLAN-Name und WLAN-Passwort stehen in `idf.py -C firmware menuconfig` unter „Raeucherofensteuerung“. Das Passwort hat einen Platzhalter als Standard; mit ihm startet der Access Point nicht, die Regelung läuft dann ohne WLAN (E-041). Mit eigenem Passwort spannt der ESP32 das WLAN „Raeucherofen“ auf, die Seite ist unter `http://192.168.4.1/` erreichbar und öffnet sich beim Verbinden meist von selbst. Aufbau und Prüfschritte stehen in `docs/hardwaretest.md`.
 
-Beim Bauen wird `firmware/www/` mit gzip komprimiert und als LittleFS-Abbild in die Partition `www` geschrieben (E-038). Bis M9 liegt dort nur eine Platzhalterseite.
+Beim Bauen wird `web/dist` mit gzip komprimiert und als LittleFS-Abbild in die Partition `www` geschrieben (E-038, E-043). Deshalb zuerst die Weboberfläche bauen; fehlt `web/dist`, bricht der Firmware-Build mit Hinweis ab.
 
 `firmware/sdkconfig` entsteht beim ersten Bauen aus `firmware/sdkconfig.defaults` und steht nicht im Repository. Nach einer Änderung an `sdkconfig.defaults` die Datei `firmware/sdkconfig` löschen, sonst gelten die alten Werte weiter.
 

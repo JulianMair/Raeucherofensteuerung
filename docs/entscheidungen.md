@@ -456,3 +456,52 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
 - **Verworfen:**
   - Nur die Durchsicht des Codes: nicht maschinell.
   - Die Header von core für net sperren: net braucht die Typen von Snapshot und Befehl.
+
+## E-043 Werkzeuge und Versionen der Weboberfläche (M9)
+
+- **Kontext:** Preact, TypeScript (strict), Vite und uPlot sind vorgegeben (WEB-01), dazu Vitest, Testing Library und MSW (WEB-05). Die Typen kommen aus `docs/api.yaml` (API-01), gezippt bleibt alles unter 80 KB (WEB-07).
+- **Entscheidung:**
+  - Vom Nutzer gewählt: bewährte Hauptversionen, jede mindestens zwei Wochen alt und exakt festgelegt: Preact 10.29.8, Vite 8.3.5, @preact/preset-vite 2.10.6, TypeScript 5.9.3, uPlot 1.6.32, openapi-typescript 7.13.0, Vitest 4.1.12, jsdom 29.1.1, @testing-library/preact 3.2.6, MSW 2.15.0, ESLint 10.13.0 mit @eslint/js 10.0.1, typescript-eslint 8.72.0, globals 17.13.0, @types/node 24.19.2. TypeScript 6 und 7 passen nicht zu openapi-typescript (`^5.x`), 7 auch nicht zu typescript-eslint.
+  - Node 24 lokal und in CI. Die Lock-Datei hat npm 11.19.1 erzeugt (die Version von Node 24.22). npm 11.4.2 scheiterte beim Auflösen an einem Fehler in npm selbst (`edgesOut`); `npm ci` aus der Lock-Datei klappt auch mit 11.4.2. Wer Pakete ändert, nimmt `npx npm@11.19.1 install`.
+  - `npm run generate` erzeugt `src/api/schema.d.ts` aus `docs/api.yaml`; die Datei steht nicht im Repository. Lint, Typprüfung, Tests und Build erzeugen sie vorher neu. `src/api/types.ts` gibt den Typen nur kurze Namen.
+  - TypeScript mit `strict` und `noUncheckedIndexedAccess`; ESLint mit den empfohlenen Regeln und `recommendedTypeChecked`.
+  - Das Größenbudget misst `firmware/tools/gzip_web.py --max-bytes 81920`, also genau die Dateien, die ins LittleFS kommen. Drei ctests prüfen das Skript selbst. Stand M9: 34 235 Byte.
+  - Vom Nutzer gewählt: Fehlt `web/dist`, bricht der Firmware-Build mit Hinweis ab. In CI lädt der Web-Job den Build als Artefakt hoch, der Firmware-Job wartet darauf (`needs: web`) und lädt ihn herunter. Die Platzhalterseite aus M8 ist entfallen.
+  - `npm run dev` leitet `/api` und `/ws` an 192.168.4.1 weiter, um die Oberfläche am echten Gerät zu entwickeln.
+- **Verworfen:**
+  - Die neuesten Hauptversionen (Preact 11, MSW 3, Vitest 5, jsdom 30): erst 5 bis 9 Wochen alt; jsdom 30 bräuchte Node 24.15.
+  - Die erzeugten Typen ins Repository legen: Sie könnten von `api.yaml` abweichen, ohne dass es jemand merkt.
+  - Ein eigenes Messskript für das Budget in Node: Es könnte anders zählen als der Firmware-Build.
+  - Bei fehlendem `web/dist` die Platzhalterseite flashen: Man flasht leicht eine Firmware ohne Oberfläche.
+
+## E-044 Kalibrieroffset in der Oberfläche (M9)
+
+- **Kontext:** CLAUDE.md nennt bei den Ansichten Sensorrollen, aber keinen Offset. Der Befehl „Offset setzen“ gehört seit M5 zur API (E-026), sonst wäre SEN-01 nur per curl einstellbar.
+- **Entscheidung:** Vom Nutzer gewählt: Jeder Sensor hat neben der Rolle ein Feld für den Offset, vorab geprüft gegen ±`offset_max_c`. Rolle und Offset sind beim Heizen gesperrt, wie im Regeltask (E-022).
+- **Verworfen:** Den Offset nur über die API: eine Funktion der API, die niemand ohne curl nutzen kann.
+
+## E-045 Liveverbindung und Anzeige bei Verlust (M9)
+
+- **Kontext:** Klare Anzeige bei Verbindungsverlust (WEB-03). Verlässt ein Handy das WLAN, meldet TCP das oft erst nach Minuten; der WebSocket bleibt so lange scheinbar offen.
+- **Entscheidung:**
+  - `connectLive` verbindet sich nach einem Abbruch neu, nach 1, 2, 4 und danach alle 5 s. Nach einer gelungenen Verbindung fängt die Folge wieder bei 1 s an.
+  - Kommt 3,5 s lang keine Nachricht (drei verpasste Sekunden und etwas Luft), gilt die Verbindung als getrennt; die Oberfläche schließt sie und verbindet neu.
+  - Ohne Verbindung steht oben „Verbindung getrennt, letzte Daten vor N s“, die alten Werte sind grau, und alle Befehle sind gesperrt.
+  - Der WebSocket wird von außen übergeben (`SocketFactory`), die Tests setzen einen Fake ein; der echte steckt hinter einem kleinen Adapter.
+- **Verworfen:**
+  - Nur auf `close` warten: Der Verlust fiele erst nach Minuten auf.
+  - Befehle auch ohne Verbindung erlauben: Man sähe nicht, ob sie wirken.
+
+## E-046 Eingaben, Texte und Livekurve (M9)
+
+- **Kontext:** Ungültige Eingaben, abgelehnte Sollwerte und der sichere Zustand müssen klar angezeigt werden (WEB-02, WEB-06). Das Gerät hat keinen Verlauf gespeichert.
+- **Entscheidung:**
+  - Sollwert und Offset werden vor dem Senden gegen `/api/config` geprüft: leer, keine Zahl oder außerhalb der Grenzen geht nicht hinaus. Komma und Punkt sind erlaubt. Das Gerät prüft trotzdem selbst; lehnt es ab, zeigt die Oberfläche den Grund aus der Antwort.
+  - Alle deutschen Texte stehen als `Record` über den erzeugten Typen in `labels.ts`. Ein neuer Wert in `api.yaml` ohne Text kompiliert nicht.
+  - Start ist im sicheren Zustand gesperrt, Stopp nur beim Heizen frei, Reset nur im sicheren Zustand. FEHLER und sicherer Zustand stehen als Band mit Ursache ganz oben.
+  - Vom Nutzer gewählt: Die Livekurve zeigt Garraum, Kern 1, Kern 2 und den Sollwert in °C, seit dem Öffnen der Seite, höchstens 6 Stunden. Die x-Achse nutzt die Uhrzeit des Browsers, weil die Zeit des Geräts ab dessen Start zählt. Achse und Legende sind deutsch formatiert.
+  - Der Verlauf ist eine reine Funktion (`history.ts`) mit Tests und wird an Ort und Stelle erweitert, damit nicht jede Sekunde 6 Stunden Daten kopiert werden. In den Tests ersetzt ein Fake uPlot, weil jsdom kein Canvas hat.
+  - Das Layout ist zuerst für das Handy: Touch-Ziele mindestens 48 px, Eingaben mit 16 px Schrift, Sensoren als Karten statt Tabelle. Geprüft im Browser bei 375 px Breite mit einem Ersatzgerät, das nicht im Repository liegt.
+- **Verworfen:**
+  - Einen Verlauf im Gerät speichern: nicht im Umfang.
+  - Ein CSS-Framework: kostet Budget und Erklärung für wenig Nutzen.

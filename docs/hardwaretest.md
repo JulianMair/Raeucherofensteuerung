@@ -102,8 +102,8 @@ websocat ws://192.168.4.1/ws
 |---|---|---|---|
 | H8-01 | Mit dem Platzhalter-Passwort flashen | Log: „Access Point startet nicht: WLAN-Passwort ist noch der Platzhalter …“, kein WLAN sichtbar, das Statuslog läuft weiter (NET-04) | |
 | H8-02 | Eigenes Passwort setzen, flashen | Log: „Access Point "Raeucherofen" läuft“, das WLAN ist mit WPA2 sichtbar (NET-01) | |
-| H8-03 | Handy verbinden | Das Handy meldet eine Anmeldeseite, sie zeigt die Platzhalterseite (NET-02, NET-03) | |
-| H8-04 | Im Browser `http://192.168.4.1/` und `http://beispiel.de/` öffnen | Beide zeigen die Platzhalterseite | |
+| H8-03 | Handy verbinden | Das Handy meldet eine Anmeldeseite, sie zeigt die Oberfläche (seit M9; davor die Platzhalterseite) (NET-02, NET-03) | |
+| H8-04 | Im Browser `http://192.168.4.1/` und `http://beispiel.de/` öffnen | Beide zeigen die Oberfläche (seit M9; davor die Platzhalterseite) | |
 | H8-05 | `GET /api/state` | JSON wie `docs/api-examples/state.json`, mit den echten Sensoren | |
 | H8-06 | `GET /api/config` | Grenzen: Sollwert 20 bis 110, Offset 5, harte Grenze 120 | |
 | H8-07 | Rolle `chamber` zuweisen | `{"seq":…,"result":"ok"}`, danach im Statuslog Zustand `idle` statt `fault` | |
@@ -116,6 +116,34 @@ websocat ws://192.168.4.1/ws
 | H8-14 | Beim Heizen das WLAN am Mac trennen | Das Statuslog läuft weiter, die LED schaltet weiter nach Tastgrad (ARC-09) | |
 
 Hinweis zu H8-09: Hat der Ausgang 10 Minuten lang ohne Änderung über 0,05 °C geheizt, meldet die Sicherheitslogik `frozen`. Das ist gewollt (SAF-05). Bei Raumtemperatur ohne Heizelement passiert das leicht.
+
+## M9: Weboberfläche
+
+Vorbereitung: Oberfläche bauen, dann die Firmware wie gewohnt bauen und flashen. Ohne `web/dist` bricht der Firmware-Build ab.
+
+```bash
+npm --prefix web ci
+```
+
+```bash
+npm --prefix web run build
+```
+
+Die Schritte am Handy, das mit dem WLAN „Raeucherofen“ verbunden ist:
+
+| ID | Schritt | Erwartet | Ergebnis |
+|---|---|---|---|
+| H9-01 | Verbinden, Anmeldeseite öffnen | Die Oberfläche erscheint statt der früheren Platzhalterseite, mit Zustand, Bedienung, Kurve und Sensoren (WEB-02, NET-03) | |
+| H9-02 | Ohne zugeordneten Garraum | Oranges Band „Fehler: Start gesperrt“ mit Ursache „Garraum keinem Sensor zugeordnet“ | |
+| H9-03 | Unter „Sensoren“ einem Sensor die Rolle Garraum geben | „Ausgeführt“, Zustand „Bereit“, das Band verschwindet | |
+| H9-04 | Sollwert „abc“, „15“ und „120“ eingeben | Meldung unter dem Feld, nichts wird gesendet (WEB-06) | |
+| H9-05 | Sollwert „30,5“ setzen, Start | „Ausgeführt“, Zustand „Aufheizen“, die Kurve zeigt Garraum und Sollwert (WEB-02) | |
+| H9-06 | Beim Heizen Rolle oder Offset ändern wollen | Felder gesperrt mit Hinweis | |
+| H9-07 | Garraumsensor abziehen | Rotes Band „Sicherer Zustand“ mit Ursache, Start gesperrt, Reset frei. Reset vor dem Einstecken: „Die Ursache besteht noch“. Nach dem Einstecken: Reset, Zustand „Bereit“ (WEB-06) | |
+| H9-08 | WLAN am Handy aus, nach 10 s wieder an | Band „Verbindung getrennt, letzte Daten vor … s“, Werte grau, Knöpfe gesperrt; nach dem Einschalten verbindet sich die Seite von selbst, das Band verschwindet (WEB-03) | |
+| H9-09 | Mit dem Handy aus der Reichweite gehen, zurückkommen | Das Band erscheint nach wenigen Sekunden, nicht erst nach Minuten (E-045) | |
+| H9-10 | Handy drehen | Die Kurve passt sich der Breite an, nichts ragt über den Rand (WEB-04) | |
+| H9-11 | Offset 0,5 bei einem Sensor setzen | „Ausgeführt“, der Wert des Sensors steigt um 0,5 °C (SEN-01) | |
 
 ## Rauchtest im Emulator
 

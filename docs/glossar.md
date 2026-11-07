@@ -119,5 +119,11 @@ In Prüfreihenfolge. Die erste Ursache, die auslöst, wird verriegelt.
 | Livewerte über den WebSocket | `ws_live` |
 | Ergebnis eines Befehls suchen | `rof_proto_command_result()` |
 | Symbolprüfung | `check_net_symbols.py` |
+| Weboberfläche | `web/`, Einstieg `App` |
+| Liveverbindung | `connectLive()`, `useLive()` |
+| Ergebnis eines Befehls in der Oberfläche | `CommandOutcome` |
+| Verlauf der Livekurve | `History`, `appendState()` |
+| Prüfung der Eingaben | `checkSetpoint()`, `checkOffset()` |
+| Größenbudget | `gzip_web.py --max-bytes` |
 
 In der API (`docs/api.yaml`) stehen dieselben englischen Namen in Kleinbuchstaben, zum Beispiel `ROF_STATE_SAFE_STATE` als `"safe_state"` oder `ROF_ROLE_CHAMBER` als `"chamber"`.
