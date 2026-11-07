@@ -289,4 +289,4 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 - Redocly fand das veraltete Beispiel für `/api/config`, die Typprüfung der Oberfläche die fehlenden Texte für die neuen Ergebnisse. Beide Prüfungen wirkten wie geplant (E-029, E-046).
 - Die Abweichungen im Simulator sind sehr klein, weil der Simulator dasselbe Modell nutzt. Claude hat darauf hingewiesen, dass das die Güte an echtem Fleisch nicht belegt (E-047).
 
-**Vom Nutzer geändert oder abgelehnt:** wird nach dem Review von M10 ergänzt.
+**Vom Nutzer geändert oder abgelehnt:** nichts. CI-Lauf #18 nach dem Push war grün. Der Nutzer hat die Oberfläche mit einem interaktiven Ersatzgerät von Claude (Node-Skript im Scratchpad) durchgeklickt und die Host-Tests (37 ctest-Einträge) und Web-Tests (105) selbst ausgeführt, alle grün. Das Ersatzgerät ins Repository aufzunehmen hat der Nutzer abgelehnt. Programme wie für Lachs sollen später kommen, außerhalb des Prüfungsumfangs. Die Hardwaretests H7 bis H10 stehen aus, die Bauteile fehlen noch.
