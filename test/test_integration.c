@@ -317,6 +317,69 @@ static void test_silent_command_queue_does_not_disturb_control(void)
     TEST_ASSERT_EQUAL_UINT(received_before, queue_mock.received);
 }
 
+/* ---- Fertigzeit-Prognose (FC-01, E-047) --------------------------------- */
+
+#define CORE_TARGET_C 70.0f
+#define FORECAST_CHECKS 4u
+
+/* FC-01, Abnahme E-047: Ab 10 Minuten Lernzeit liegt die vorhergesagte
+ * Restzeit höchstens 10 Prozent neben der tatsächlichen, mindestens mit
+ * 2 Minuten Toleranz. Der Simulator nähert den Kern erster Ordnung mit
+ * Totzeit an (tau 1 h, Totzeit 2 min). Gemessen: +4,1 % nach 10 min,
+ * +0,3 % nach 20 min, danach 0 % (E-047). */
+static void test_forecast_matches_simulated_cooking(void)
+{
+    static const unsigned CHECK_AFTER_MIN[FORECAST_CHECKS] = { 10, 20, 40, 60 };
+    uint32_t predicted_s[FORECAST_CHECKS];
+    unsigned checked_at_s[FORECAST_CHECKS];
+    size_t checks = 0;
+
+    prepare_oven();
+    send((rof_command_t){ .type = ROF_COMMAND_SET_CORE_TARGET, .value_c = CORE_TARGET_C });
+    start_at(SETPOINT_C);
+    TEST_ASSERT_TRUE(run_until_state(ROF_STATE_HOLDING, 30u * MINUTE_S) <= 30u * MINUTE_S);
+
+    unsigned holding_s = 0;
+    for (;;) {
+        rof_controller_snapshot(&ctrl, &snap);
+        TEST_ASSERT_EQUAL(ROF_STATE_HOLDING, snap.state);
+        if (snap.roles[ROF_ROLE_PROBE_1].temp_c >= CORE_TARGET_C) {
+            break;
+        }
+        if (checks < FORECAST_CHECKS && holding_s == CHECK_AFTER_MIN[checks] * MINUTE_S) {
+            TEST_ASSERT_EQUAL(ROF_FORECAST_OK, snap.forecast[0].status);
+            predicted_s[checks] = snap.forecast[0].remaining_s;
+            checked_at_s[checks] = holding_s;
+            checks++;
+        }
+        TEST_ASSERT_TRUE(holding_s < 6u * HOUR_S);
+        run_one_second();
+        holding_s++;
+    }
+
+    TEST_ASSERT_EQUAL_size_t(FORECAST_CHECKS, checks);
+    TEST_ASSERT_EQUAL(ROF_FORECAST_REACHED, snap.forecast[0].status);
+    for (size_t i = 0; i < FORECAST_CHECKS; i++) {
+        const uint32_t actual_s = holding_s - checked_at_s[i];
+        const uint32_t tolerance_s = actual_s / 10u > 120u ? actual_s / 10u : 120u;
+        TEST_ASSERT_UINT32_WITHIN(tolerance_s, actual_s, predicted_s[i]);
+    }
+}
+
+/* Kern 2 ist im Simulator nicht angeschlossen: keine Prognose, kein Einfluss auf Kern 1 */
+static void test_forecast_without_second_probe(void)
+{
+    prepare_oven();
+    send((rof_command_t){ .type = ROF_COMMAND_SET_CORE_TARGET, .value_c = CORE_TARGET_C });
+    start_at(SETPOINT_C);
+    run_until_state(ROF_STATE_HOLDING, 30u * MINUTE_S);
+    run_seconds(10u * MINUTE_S);
+
+    rof_controller_snapshot(&ctrl, &snap);
+    TEST_ASSERT_EQUAL(ROF_FORECAST_OK, snap.forecast[0].status);
+    TEST_ASSERT_EQUAL(ROF_FORECAST_UNAVAILABLE, snap.forecast[1].status);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -331,6 +394,8 @@ int main(void)
 
     RUN_TEST(test_flooded_command_queue_does_not_disturb_control);
     RUN_TEST(test_silent_command_queue_does_not_disturb_control);
+    RUN_TEST(test_forecast_matches_simulated_cooking);
+    RUN_TEST(test_forecast_without_second_probe);
 
     return UNITY_END();
 }
