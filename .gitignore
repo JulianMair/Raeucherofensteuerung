@@ -20,6 +20,8 @@ firmware/managed_components/
 # Weboberfläche
 node_modules/
 web/dist/
+# Aus docs/api.yaml erzeugt (npm run generate), die API bleibt die einzige Quelle
+web/src/api/schema.d.ts
 
 # Editor und Betriebssystem
 .DS_Store
