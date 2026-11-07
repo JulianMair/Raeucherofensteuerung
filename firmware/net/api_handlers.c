@@ -12,8 +12,9 @@
 
 static const char *const TAG = "api";
 
-typedef enum { API_SETPOINT, API_START, API_STOP, API_RESET, API_SENSOR } api_command_t;
+typedef enum { API_SETPOINT, API_CORE_TARGET, API_START, API_STOP, API_RESET, API_SENSOR } api_command_t;
 static const api_command_t KIND_SETPOINT = API_SETPOINT;
+static const api_command_t KIND_CORE_TARGET = API_CORE_TARGET;
 static const api_command_t KIND_START = API_START;
 static const api_command_t KIND_STOP = API_STOP;
 static const api_command_t KIND_RESET = API_RESET;
@@ -132,6 +133,8 @@ static rof_proto_result_t decode(httpd_req_t *req, api_command_t kind, size_t le
     switch (kind) {
     case API_SETPOINT:
         return rof_proto_decode_setpoint(body, len, &snapshot.limits, cmd);
+    case API_CORE_TARGET:
+        return rof_proto_decode_core_target(body, len, &snapshot.limits, cmd);
     case API_START:
         return rof_proto_decode_empty(ROF_COMMAND_START, body, len, cmd);
     case API_STOP:
@@ -210,6 +213,7 @@ static const httpd_uri_t ROUTES[] = {
     { .uri = "/api/state", .method = HTTP_GET, .handler = state_handler },
     { .uri = "/api/config", .method = HTTP_GET, .handler = config_handler },
     { .uri = "/api/setpoint", .method = HTTP_POST, .handler = command_handler, .user_ctx = (void *)&KIND_SETPOINT },
+    { .uri = "/api/core-target", .method = HTTP_POST, .handler = command_handler, .user_ctx = (void *)&KIND_CORE_TARGET },
     { .uri = "/api/start", .method = HTTP_POST, .handler = command_handler, .user_ctx = (void *)&KIND_START },
     { .uri = "/api/stop", .method = HTTP_POST, .handler = command_handler, .user_ctx = (void *)&KIND_STOP },
     { .uri = "/api/reset", .method = HTTP_POST, .handler = command_handler, .user_ctx = (void *)&KIND_RESET },

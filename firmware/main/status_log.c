@@ -44,6 +44,14 @@ static void log_snapshot(const rof_snapshot_t *s)
     if (s->sensor_overflow) {
         ESP_LOGW(TAG, "Mehr Sensoren am Bus, als es Kanäle gibt");
     }
+    /* Fertigzeit-Prognose (FC-01): Restzeit nur bei ok */
+    char target[16] = "-";
+    if (s->has_core_target) {
+        snprintf(target, sizeof(target), "%.1f °C", s->core_target_c);
+    }
+    ESP_LOGI(TAG, "Kernziel %s, Prognose Kern 1 %s %lu s, Kern 2 %s %lu s", target,
+             rof_proto_forecast_status_name(s->forecast[0].status), (unsigned long)s->forecast[0].remaining_s,
+             rof_proto_forecast_status_name(s->forecast[1].status), (unsigned long)s->forecast[1].remaining_s);
 }
 
 static void log_runtime(void)
