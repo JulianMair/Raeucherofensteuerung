@@ -1,0 +1,292 @@
+/* Layout der Weboberfläche (WEB-04): zuerst für das Handy, ab 40rem breiter.
+   Touch-Ziele sind mindestens 48px hoch, Eingaben haben 16px Schrift, sonst
+   vergrößert iOS beim Antippen die Seite. */
+
+:root {
+  --bg: #f4f1ec;
+  --panel: #ffffff;
+  --fg: #1f2328;
+  --muted: #5c6370;
+  --border: #d9d4cc;
+  --accent: #b45309;
+  --ok: #15803d;
+  --error: #b91c1c;
+  --warn: #b45309;
+  --radius: 12px;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+}
+
+main {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+h1 {
+  font-size: 1.5rem;
+  margin: 0 0 1rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* Alte Werte ohne Verbindung (WEB-03) */
+.stale {
+  opacity: 0.55;
+  filter: grayscale(1);
+}
+
+.banner {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  font-weight: 600;
+}
+
+.banner-connecting {
+  background: #fef3c7;
+  color: #78350f;
+}
+
+.banner-offline {
+  background: var(--error);
+  color: #ffffff;
+}
+
+/* Fehler und sicherer Zustand */
+.band {
+  margin: -1rem -1rem 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius) var(--radius) 0 0;
+  color: #ffffff;
+}
+
+.band-safe {
+  background: var(--error);
+}
+
+.band-fault {
+  background: var(--warn);
+}
+
+.state {
+  display: inline-block;
+  margin: 0 0 0.75rem;
+  padding: 0.25rem 0.9rem;
+  border-radius: 999px;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.state-idle {
+  background: #475569;
+}
+
+.state-heating {
+  background: #c2410c;
+}
+
+.state-holding {
+  background: var(--ok);
+}
+
+.state-cooling {
+  background: #1d4ed8;
+}
+
+.state-fault {
+  background: var(--warn);
+}
+
+.state-safe_state {
+  background: var(--error);
+}
+
+dl {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0 0 0.75rem;
+}
+
+dt {
+  color: var(--muted);
+}
+
+dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+label {
+  display: block;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+input,
+select,
+button {
+  font: inherit;
+  font-size: 16px;
+  min-height: 48px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  padding: 0 0.75rem;
+  box-sizing: border-box;
+}
+
+input,
+select {
+  width: 100%;
+  background: #ffffff;
+  color: var(--fg);
+}
+
+button {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  background: #e5e7eb;
+  border-color: #e5e7eb;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.setpoint {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+  align-items: end;
+  margin-bottom: 0.75rem;
+}
+
+.setpoint label {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.buttons .reset {
+  grid-column: 1 / -1;
+  background: var(--error);
+  border-color: var(--error);
+}
+
+.buttons .reset:disabled {
+  background: #e5e7eb;
+  border-color: #e5e7eb;
+}
+
+.message {
+  min-height: 1.4em;
+  margin: 0.75rem 0 0;
+}
+
+.message.ok {
+  color: var(--ok);
+}
+
+.message.error {
+  color: var(--error);
+  font-weight: 600;
+}
+
+.hint {
+  color: var(--muted);
+}
+
+.sensors {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.sensor {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.sensor-head,
+.sensor-value {
+  margin: 0 0 0.5rem;
+}
+
+.sensor-head code {
+  font-size: 0.95rem;
+}
+
+.sensor-head span,
+.sensor-status {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.sensor-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.offset {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+  align-items: end;
+  margin-top: 0.5rem;
+}
+
+.offset label {
+  margin: 0;
+}
+
+.chart {
+  width: 100%;
+  overflow: hidden;
+}
+
+@media (min-width: 40rem) {
+  .buttons {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .buttons .reset {
+    grid-column: auto;
+  }
+}

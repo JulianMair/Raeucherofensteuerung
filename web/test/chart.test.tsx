@@ -21,7 +21,7 @@ describe("Livekurve", () => {
     render(<LiveChart history={emptyHistory()} version={0} />);
 
     const plot = onlyPlot();
-    expect(plot.options.series.map((s) => s.label)).toEqual([undefined, "Garraum", "Kern 1", "Kern 2", "Sollwert"]);
+    expect(plot.options.series.map((s) => s.label)).toEqual(["Zeit", "Garraum", "Kern 1", "Kern 2", "Sollwert"]);
     expect(plot.options.scales?.x?.time).toBe(true);
   });
 

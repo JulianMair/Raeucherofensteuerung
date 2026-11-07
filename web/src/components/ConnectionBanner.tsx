@@ -20,7 +20,8 @@ export function ConnectionBanner({ live, now }: Props) {
   const ageS = Math.max(0, Math.round((now - live.receivedAt) / 1000));
   return (
     <p class="banner banner-offline" role="status">
-      Verbindung getrennt, letzte Daten vor {ageS} s. Neuer Versuch läuft.
+      {/* geschütztes Leerzeichen, damit Zahl und Einheit zusammenbleiben */}
+      Verbindung getrennt, letzte Daten vor {ageS}&nbsp;s. Neuer Versuch läuft.
     </p>
   );
 }

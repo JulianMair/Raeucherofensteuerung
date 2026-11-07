@@ -55,8 +55,9 @@ function SensorRow({ channel, limits, locked, run, report }: RowProps) {
         {formatTemperature(channel.temp_c)} <span class="sensor-status">{channelStatus(channel)}</span>
       </p>
       <label>
-        Rolle von {channel.id}
+        Rolle
         <select
+          aria-label={`Rolle von ${channel.id}`}
           value={channel.role}
           disabled={locked}
           onChange={(event) => {
@@ -73,8 +74,9 @@ function SensorRow({ channel, limits, locked, run, report }: RowProps) {
       </label>
       <form class="offset" onSubmit={submitOffset}>
         <label>
-          Offset von {channel.id} (°C)
+          Offset (°C)
           <input
+            aria-label={`Offset von ${channel.id} (°C)`}
             type="text"
             inputMode="decimal"
             autoComplete="off"

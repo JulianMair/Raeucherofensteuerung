@@ -51,7 +51,7 @@ describe("App mit Liveverbindung", () => {
     await act(() => {
       vi.advanceTimersByTime(3000);
     });
-    expect(screen.getByRole("status").textContent).toMatch(/vor [34] s/);
+    expect(screen.getByRole("status").textContent).toMatch(/vor [34]\u00a0s/);
 
     await act(() => {
       vi.advanceTimersByTime(RECONNECT_DELAYS_MS[0] ?? 0);

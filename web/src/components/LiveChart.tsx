@@ -4,6 +4,7 @@ import { useEffect, useRef } from "preact/hooks";
 import uPlot from "uplot";
 
 import type { History } from "../history";
+import { formatTemperature } from "../labels";
 
 interface Props {
   history: History;
@@ -11,14 +12,39 @@ interface Props {
 }
 
 const HEIGHT_PX = 260;
+/* Unter 10 Minuten Spanne zeigt die Zeitachse auch Sekunden */
+const SECONDS_BELOW_S = 600;
+
+/* Uhrzeit auf Deutsch, uPlot zeigt sonst amerikanisches Format */
+function clock(seconds: number, withSeconds: boolean): string {
+  return new Date(seconds * 1000).toLocaleTimeString("de-DE", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: withSeconds ? "2-digit" : undefined,
+  });
+}
+
+function temperatureValue(_plot: uPlot, value: number | null): string {
+  return formatTemperature(value);
+}
 
 /* Linien in der Reihenfolge der Spalten von History */
 const SERIES: uPlot.Series[] = [
-  {},
-  { label: "Garraum", stroke: "#c2410c", width: 2 },
-  { label: "Kern 1", stroke: "#1d4ed8", width: 2 },
-  { label: "Kern 2", stroke: "#15803d", width: 2 },
-  { label: "Sollwert", stroke: "#6b7280", width: 1.5, dash: [6, 4] },
+  { label: "Zeit", value: (_plot, value: number | null) => (value === null ? "–" : clock(value, true)) },
+  { label: "Garraum", stroke: "#c2410c", width: 2, value: temperatureValue },
+  { label: "Kern 1", stroke: "#1d4ed8", width: 2, value: temperatureValue },
+  { label: "Kern 2", stroke: "#15803d", width: 2, value: temperatureValue },
+  { label: "Sollwert", stroke: "#6b7280", width: 1.5, dash: [6, 4], value: temperatureValue },
+];
+
+const AXES: uPlot.Axis[] = [
+  {
+    values: (plot, splits) => {
+      const span = (plot.scales.x?.max ?? 0) - (plot.scales.x?.min ?? 0);
+      return splits.map((split) => clock(split, span < SECONDS_BELOW_S));
+    },
+  },
+  { label: "°C" },
 ];
 
 function columns(history: History): uPlot.AlignedData {
@@ -39,7 +65,7 @@ export function LiveChart({ history, version }: Props) {
       width: element.clientWidth,
       height: HEIGHT_PX,
       series: SERIES,
-      axes: [{}, { label: "°C" }],
+      axes: AXES,
       scales: { x: { time: true } },
     };
     const chart = new uPlot(options, columns(history), element);
