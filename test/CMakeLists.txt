@@ -110,6 +110,19 @@ add_test(NAME net_symbols_detects_core_call
 set_tests_properties(net_symbols_detects_core_call PROPERTIES
                      PASS_REGULAR_EXPRESSION "firmware/net ruft rof_controller_cycle aus forbidden.txt auf")
 
+# Größenbudget der Weboberfläche (WEB-07, E-043): dasselbe Skript wie im
+# Firmware-Build und im Web-Job von CI, hier mit einer kleinen Testseite.
+set(GZIP_WEB ${PROJECT_SOURCE_DIR}/firmware/tools/gzip_web.py)
+set(GZIP_FIXTURE ${CMAKE_CURRENT_SOURCE_DIR}/gzip_web/fixture)
+add_test(NAME gzip_web_within_budget
+         COMMAND ${Python3_EXECUTABLE} ${GZIP_WEB} ${GZIP_FIXTURE} ${CMAKE_CURRENT_BINARY_DIR}/gzip_ok --max-bytes 1000)
+add_test(NAME gzip_web_over_budget
+         COMMAND ${Python3_EXECUTABLE} ${GZIP_WEB} ${GZIP_FIXTURE} ${CMAKE_CURRENT_BINARY_DIR}/gzip_big --max-bytes 10)
+set_tests_properties(gzip_web_over_budget PROPERTIES PASS_REGULAR_EXPRESSION "Größenbudget überschritten")
+add_test(NAME gzip_web_missing_source
+         COMMAND ${Python3_EXECUTABLE} ${GZIP_WEB} ${CMAKE_CURRENT_SOURCE_DIR}/gzip_web/fehlt ${CMAKE_CURRENT_BINARY_DIR}/gzip_none)
+set_tests_properties(gzip_web_missing_source PROPERTIES PASS_REGULAR_EXPRESSION "Ordner der Weboberfläche fehlt")
+
 add_executable(test_json_writer test_json_writer.c)
 target_link_libraries(test_json_writer PRIVATE unity rof_proto project_warnings)
 add_test(NAME json_writer COMMAND test_json_writer)

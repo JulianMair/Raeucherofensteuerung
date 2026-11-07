@@ -1,5 +1,5 @@
-# CI: Host-Build mit Unity-Tests und statischer Analyse, Firmware-Build
-# mit ESP-IDF. Der Job für die Weboberfläche kommt in M9 dazu.
+# CI: Host-Build mit Unity-Tests und statischer Analyse, Weboberfläche,
+# Firmware-Build mit ESP-IDF.
 name: CI
 
 on:
@@ -45,6 +45,47 @@ jobs:
       # Version fest, Regeln in redocly.yaml (E-029).
       - name: OpenAPI prüfen
         run: npx --yes @redocly/cli@2.64.0 lint docs/api.yaml
+
+  # Weboberfläche (CI-03): Lint, Typen, Tests, Build, Größenbudget (WEB-07)
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Abhängigkeiten installieren
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typprüfung
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Bauen
+        run: npm run build
+
+      # Gemessen wird genau, was später im LittleFS liegt (E-043)
+      - name: Größenbudget (gzip unter 80 KB)
+        run: python3 ../firmware/tools/gzip_web.py dist "$RUNNER_TEMP/www_gzip" --max-bytes 81920
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: web-dist
+          path: web/dist
+          if-no-files-found: error
 
   # Firmware mit fester ESP-IDF-Version im offiziellen Container (CI-04).
   # Die Version muss zu der passen, mit der lokal gebaut wird (E-031).
