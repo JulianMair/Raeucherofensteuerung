@@ -169,6 +169,8 @@ idf.py -C firmware menuconfig
 
 Mit dem Platzhalter startet der Access Point nicht, die Regelung läuft dann ohne WLAN (E-041). Das eigene Passwort steht nur in `firmware/sdkconfig`. Diese Datei entsteht beim ersten Bauen aus `firmware/sdkconfig.defaults` und steht nicht im Repository. Nach einer Änderung an `sdkconfig.defaults` die Datei `firmware/sdkconfig` löschen, sonst gelten die alten Werte weiter.
 
+Im Menü speichert die Taste S (mit Enter bestätigen), Q beendet. Nicht D drücken: „Save minimal config“ überschreibt `firmware/sdkconfig.defaults`, und das Passwort stünde dann in einer Datei des Repositorys. Ist das passiert, stellt `git restore -- firmware/sdkconfig.defaults` die Datei wieder her.
+
 ### Bauen
 
 Zuerst die Weboberfläche bauen (`npm --prefix web run build`). Der Firmware-Build komprimiert `web/dist` mit gzip und schreibt es als LittleFS-Abbild in die Partition `www` (E-038). Fehlt `web/dist`, bricht er mit Hinweis ab.
@@ -179,13 +181,16 @@ idf.py -C firmware build
 
 ### Flashen und Monitor
 
-Das Board über den USB-Anschluss mit der Aufschrift „UART“ anschließen. Den Port findet `idf.py` meist selbst, sonst mit `-p /dev/cu.…` angeben.
+Das Board über den USB-Anschluss mit der Aufschrift „UART“ anschließen, mit einem Kabel, das auch Daten überträgt. `ls /dev/cu.*` zeigt den Port. Auf dem Testboard sitzt hinter diesem Anschluss ein CH343; macOS bindet ihn ohne Treiber als `/dev/cu.usbmodem…` ein. Den Port mit `-p` angeben, sonst probiert `idf.py` alle seriellen Ports durch, auch die von Bluetooth-Geräten.
 
 ```bash
-idf.py -C firmware flash monitor
+idf.py -C firmware -p /dev/cu.usbmodemXXXX flash monitor
 ```
 
-Den Monitor beendet Ctrl+]. Alle 5 s schreibt die Firmware ein Statuslog: Zustand, Sollwert, Tastgrad, aktive und verriegelte Ursache, jeden Sensor mit Rolle und Wert, Kernziel und Prognose sowie die Laufzeit des Regeltasks.
+- `monitor` braucht ein echtes Terminal und hält den Port offen, bis Ctrl+] ihn beendet. Solange er läuft, scheitert jedes weitere Flashen mit „port is busy“.
+- Über den Anschluss „UART“ schaltet `idf.py` den Chip selbst in den Download-Modus. Am Anschluss „USB“ gelingt das nicht, solange dort eine fremde Firmware läuft, etwa die des Händlers. Dann von Hand: BOOT halten, RESET kurz drücken, BOOT loslassen. Der Port bekommt dabei einen anderen Namen.
+
+Alle 5 s schreibt die Firmware ein Statuslog: Zustand, Sollwert, Tastgrad, aktive und verriegelte Ursache, jeden Sensor mit Rolle und Wert, Kernziel und Prognose sowie die Laufzeit des Regeltasks.
 
 ## Hardware aufbauen
 

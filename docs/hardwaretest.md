@@ -17,10 +17,10 @@ In jedem neuen Terminal zuerst die Umgebung von ESP-IDF laden:
 . ~/esp/esp-idf/export.sh
 ```
 
-Bauen, flashen und den seriellen Monitor öffnen. Den Port findet `idf.py` meist selbst, sonst mit `-p /dev/cu.…` angeben. Beenden mit Ctrl+].
+Bauen, flashen und den seriellen Monitor öffnen. Den Port zeigt `ls /dev/cu.*`; ihn mit `-p` angeben. Der Monitor hält den Port offen, bis Ctrl+] ihn beendet; vorher scheitert ein weiteres Flashen mit „port is busy“. Mehr dazu in der README unter „Flashen und Monitor“.
 
 ```bash
-idf.py -C firmware build flash monitor
+idf.py -C firmware -p /dev/cu.usbmodemXXXX build flash monitor
 ```
 
 ## M7: Firmware-Basis
