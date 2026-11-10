@@ -27,6 +27,8 @@ static uint32_t next_seq = 1;
 static rof_snapshot_t snapshot;
 static char body[ROF_PROTO_MAX_BODY];
 static char json[ROF_PROTO_STATE_JSON_MAX];
+static char origin[API_HEADER_MAX + 1u];
+static char host[API_HEADER_MAX + 1u];
 
 /* ---- Antworten ----------------------------------------------------------- */
 
@@ -37,6 +39,8 @@ static const char *status_line(int status)
         return "200 OK";
     case 400:
         return "400 Bad Request";
+    case 403:
+        return "403 Forbidden";
     case 409:
         return "409 Conflict";
     case 413:
@@ -60,7 +64,7 @@ static esp_err_t send_json(httpd_req_t *req, int status, size_t len)
     return httpd_resp_send(req, json, (ssize_t)len);
 }
 
-/* Fehler des Webservers selbst: busy, timeout, not_ready */
+/* Fehler des Webservers selbst: busy, timeout, not_ready, foreign_origin */
 static esp_err_t send_error(httpd_req_t *req, int status, const char *error, bool has_seq, uint32_t seq)
 {
     size_t len = 0;
@@ -150,6 +154,24 @@ static rof_proto_result_t decode(httpd_req_t *req, api_command_t kind, size_t le
     }
 }
 
+/* E-053: Ein Browser nennt bei POST und PUT im Kopf "Origin" die Seite, von
+ * der die Anfrage stammt. Eine fremde Seite im Browser eines Handys im
+ * WLAN des Ofens könnte sonst Befehle senden, ohne dass es jemand merkt. */
+static bool from_own_page(httpd_req_t *req)
+{
+    const size_t origin_len = httpd_req_get_hdr_value_len(req, "Origin");
+    if (origin_len == 0) {
+        return true; /* kein Browser, z. B. curl */
+    }
+    /* Zu lang oder ohne Host: nicht vergleichbar, gilt als fremd */
+    if (origin_len > API_HEADER_MAX ||
+        httpd_req_get_hdr_value_str(req, "Origin", origin, sizeof(origin)) != ESP_OK ||
+        httpd_req_get_hdr_value_str(req, "Host", host, sizeof(host)) != ESP_OK) {
+        return false;
+    }
+    return net_origin_allowed(origin, host);
+}
+
 /* Wartet im Snapshot auf das Ergebnis von seq, höchstens API_RESULT_TIMEOUT_MS */
 static bool wait_for_result(uint32_t seq, rof_cmd_result_t *result)
 {
@@ -186,6 +208,11 @@ static esp_err_t command_handler(httpd_req_t *req)
     const size_t len = req->content_len;
     if (!read_body(req, len)) {
         return ESP_FAIL; /* Verbindung abgebrochen, der Server schließt sie */
+    }
+    /* Erst nach dem Lesen, damit kein ungelesener Rest auf der Verbindung bleibt */
+    if (!from_own_page(req)) {
+        ESP_LOGW(TAG, "Befehl von einer fremden Seite abgelehnt");
+        return send_error(req, 403, "foreign_origin", false, 0);
     }
 
     rof_command_t cmd;

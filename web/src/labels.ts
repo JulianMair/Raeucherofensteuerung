@@ -94,6 +94,7 @@ export const ERROR_LABELS: Record<RequestErrorCode, string> = {
   unknown_value: "Unbekannter Wert",
   bad_sensor_id: "Ungültige Sensor-ID",
   too_large: "Anfrage zu groß",
+  foreign_origin: "Befehl von einer fremden Seite abgelehnt",
   busy: "Gerät beschäftigt, bitte erneut versuchen",
   timeout: "Keine Antwort vom Regeltask, der Befehl kann trotzdem wirken",
   not_ready: "Gerät startet noch",

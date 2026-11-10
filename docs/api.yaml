@@ -11,6 +11,12 @@ info:
     erreichbar (NET-01). Es gibt keine Anmeldung: Schutz bietet das
     WPA2-Passwort des Access Points.
 
+    **Herkunft:** Befehle nimmt das Gerät nur von der Seite an, die es
+    selbst ausgeliefert hat. Nennt eine Anfrage im Kopf `Origin` eine
+    andere Seite als den eigenen `Host`, antwortet es mit 403
+    `foreign_origin` (E-053). Anfragen ohne `Origin`, etwa von curl,
+    sind erlaubt.
+
     **Befehle** (POST, PUT) gehen als Befehl mit laufender Nummer über eine
     Queue an den Regeltask (ARC-05). Der Webserver prüft die Anfrage vorher
     mit `proto` und wartet höchstens 2 Sekunden im Snapshot auf das
@@ -102,6 +108,8 @@ paths:
           $ref: '#/components/responses/CommandAccepted'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/ForeignOrigin'
         '409':
           $ref: '#/components/responses/CommandConflict'
         '413':
@@ -136,6 +144,8 @@ paths:
           $ref: '#/components/responses/CommandAccepted'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/ForeignOrigin'
         '413':
           $ref: '#/components/responses/TooLarge'
         '422':
@@ -158,6 +168,8 @@ paths:
           $ref: '#/components/responses/CommandAccepted'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/ForeignOrigin'
         '409':
           $ref: '#/components/responses/CommandConflict'
         '413':
@@ -180,6 +192,8 @@ paths:
           $ref: '#/components/responses/CommandAccepted'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/ForeignOrigin'
         '413':
           $ref: '#/components/responses/TooLarge'
         '503':
@@ -200,6 +214,8 @@ paths:
           $ref: '#/components/responses/CommandAccepted'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/ForeignOrigin'
         '409':
           $ref: '#/components/responses/CommandConflict'
         '413':
@@ -232,6 +248,8 @@ paths:
           $ref: '#/components/responses/CommandAccepted'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/ForeignOrigin'
         '409':
           $ref: '#/components/responses/CommandConflict'
         '413':
@@ -266,6 +284,8 @@ paths:
           $ref: '#/components/responses/CommandAccepted'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/ForeignOrigin'
         '409':
           $ref: '#/components/responses/CommandConflict'
         '413':
@@ -368,6 +388,14 @@ components:
           example:
             error: unknown_field
             field: foo
+    ForeignOrigin:
+      description: Befehl von einer fremden Seite, nichts wurde gesendet (E-053)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RequestError'
+          example:
+            error: foreign_origin
     TooLarge:
       description: Anfrage größer als 256 Byte
       content:
@@ -702,6 +730,7 @@ components:
             - unknown_value
             - bad_sensor_id
             - too_large
+            - foreign_origin
             - busy
             - timeout
             - not_ready

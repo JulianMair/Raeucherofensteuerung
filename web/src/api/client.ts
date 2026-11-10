@@ -14,7 +14,7 @@ import type {
 export type CommandOutcome =
   /* Das Gerät hat geantwortet: angenommen oder mit Grund abgelehnt */
   | { kind: "done"; status: number; seq: number | undefined; result: CommandResult }
-  /* Die Anfrage kam nicht bis zum Regeltask: kaputt, zu groß, busy, timeout, not_ready */
+  /* Die Anfrage kam nicht bis zum Regeltask: kaputt, zu groß, fremde Seite, busy, timeout, not_ready */
   | { kind: "error"; status: number; error: RequestError }
   /* Keine Verbindung oder eine Antwort, die nicht zur API passt */
   | { kind: "network" };

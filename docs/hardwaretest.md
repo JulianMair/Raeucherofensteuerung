@@ -86,6 +86,12 @@ curl -s -i -X POST -d '{"setpoint_c":500}' http://192.168.4.1/api/setpoint
 curl -s -i -X POST -d '{"setpoint_c":' http://192.168.4.1/api/setpoint
 ```
 
+Befehl mit fremder Herkunft, wie ihn eine fremde Webseite im Browser senden würde (E-053):
+
+```bash
+curl -s -i -X POST -H "Origin: http://fremd.example" http://192.168.4.1/api/stop
+```
+
 Flut aus 40 gleichzeitigen Befehlen. Reset ist in BEREIT harmlos, er geht aber durch die Queue:
 
 ```bash
@@ -114,6 +120,7 @@ websocat ws://192.168.4.1/ws
 | H8-12 | WebSocket öffnen | Sofort eine Nachricht, danach eine je Sekunde, gleicher Inhalt wie `/api/state` (API-03) | |
 | H8-13 | Flut aus 40 Befehlen | Antworten 409. Der Server bearbeitet Befehle nacheinander, deshalb dauert die Flut einige Sekunden; ab 8 offenen Verbindungen schließt er die ältesten, dann erscheint `000`. Im Statuslog bleibt die Zykluszeit gleich, kein `safe_state`, kein Neustart (ARC-09) | |
 | H8-14 | Beim Heizen das WLAN am Mac trennen | Das Statuslog läuft weiter, die LED schaltet weiter nach Tastgrad (ARC-09) | |
+| H8-15 | Stopp mit dem Kopf `Origin: http://fremd.example` senden, danach in der Oberfläche einen Sollwert setzen | Mit fremder Herkunft: 403 mit `{"error":"foreign_origin"}`, im Log „Befehl von einer fremden Seite abgelehnt“. Aus der Oberfläche: „Ausgeführt“, am Handy und am Mac (E-053) | |
 
 Hinweis zu H8-09: Hat der Ausgang 10 Minuten lang ohne Änderung über 0,05 °C geheizt, meldet die Sicherheitslogik `frozen`. Das ist gewollt (SAF-05). Bei Raumtemperatur ohne Heizelement passiert das leicht.
 

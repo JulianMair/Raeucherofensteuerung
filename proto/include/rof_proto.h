@@ -80,7 +80,7 @@ bool rof_proto_encode_command_response(uint32_t seq, rof_cmd_result_t result, ch
 /* Von proto abgelehnt: bei Wert außerhalb {"result": Grund}, sonst {"error": ..., "field": ...} */
 bool rof_proto_encode_rejection(const rof_proto_result_t *rejection, char *buf, size_t size, size_t *len);
 
-/* Fehler des Webservers selbst, z. B. "busy", "timeout", "not_ready" */
+/* Fehler des Webservers selbst: "busy", "timeout", "not_ready", "foreign_origin" */
 bool rof_proto_encode_error(const char *error, bool has_seq, uint32_t seq, char *buf, size_t size,
                             size_t *len);
 

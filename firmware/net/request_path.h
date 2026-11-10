@@ -1,7 +1,7 @@
 /*
- * Pfade der Anfragen zerlegen (API-02, NET-02, NET-03, E-039). Reines C,
- * damit die Host-Tests es prüfen. Es greift weder auf Dateien noch auf das
- * Netzwerk zu. Der Abfrageteil ab "?" gehört nie zum Pfad.
+ * Pfade der Anfragen zerlegen und ihre Herkunft prüfen (API-02, NET-02,
+ * NET-03, E-039, E-053). Reines C, damit die Host-Tests es prüfen. Es greift
+ * weder auf Dateien noch auf das Netzwerk zu. Der Abfrageteil ab "?" gehört nie zum Pfad.
  */
 #ifndef REQUEST_PATH_H
 #define REQUEST_PATH_H
@@ -44,5 +44,12 @@ bool net_static_file_for(const char *uri, net_static_file_t *file);
 
 /* Content-Type nach der Endung vor ".gz" */
 const char *net_content_type(const char *path);
+
+/* Herkunft eines Befehls (E-053). origin ist der Kopf "Origin" der Anfrage,
+ * host der Kopf "Host"; beide dürfen NULL sein. true, wenn kein Origin
+ * genannt ist (kein Browser, z. B. curl) oder wenn er "http://" und genau
+ * host ist, die Anfrage also von der Seite kommt, die dieses Gerät
+ * ausgeliefert hat. Alles andere ist eine fremde Seite. */
+bool net_origin_allowed(const char *origin, const char *host);
 
 #endif /* REQUEST_PATH_H */

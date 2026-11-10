@@ -123,3 +123,19 @@ const char *net_content_type(const char *path)
     }
     return "application/octet-stream";
 }
+
+/* ---- Herkunft der Befehle (E-053) ----------------------------------------- */
+
+bool net_origin_allowed(const char *origin, const char *host)
+{
+    if (origin == NULL || origin[0] == '\0') {
+        return true; /* kein Browser, z. B. curl */
+    }
+    static const char SCHEME[] = "http://";
+    const size_t scheme_len = sizeof(SCHEME) - 1u;
+    if (host == NULL || host[0] == '\0' || strncmp(origin, SCHEME, scheme_len) != 0) {
+        return false;
+    }
+    /* Der Rest muss genau der Host sein, mit Port, falls einer genannt ist */
+    return strcmp(origin + scheme_len, host) == 0;
+}

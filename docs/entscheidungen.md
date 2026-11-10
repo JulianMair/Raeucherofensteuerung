@@ -573,3 +573,20 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
   - Den Status aus dem Alter der letzten Nachricht ableiten, ohne die Verbindung aufzugeben: zwei Quellen für denselben Zustand, und der neue Versuch käme trotzdem zu spät.
   - Ping-Nachrichten vom Browser: Das Gerät sendet ohnehin jede Sekunde, die Stille ist schon das Signal.
 - **Offen:** Auf dem Handy belegt das erst `docs/hardwaretest.md` H9-08 und H9-09.
+
+## E-053 Befehle nur von der eigenen Seite (nach M11)
+
+- **Kontext:** Die API hat keine Anmeldung, Schutz bietet das WPA2-Passwort (`docs/api.yaml`). Ein Browser schickt aber auch Anfragen, die eine fremde Webseite auslöst. Ein Handy im WLAN des Ofens, das über mobile Daten eine fremde Seite geladen hat, hätte von ihr unbemerkt `POST /api/start` senden können. Lesen kann eine fremde Seite die Antworten nicht, senden schon.
+- **Entscheidung:**
+  - Bei POST und PUT nennt ein Browser im Kopf `Origin` die Seite, von der die Anfrage stammt. Der Webserver vergleicht ihn mit dem Kopf `Host`: Erlaubt ist nur `http://` gefolgt von genau diesem Host. Sonst antwortet er mit 403 `foreign_origin` und sendet nichts an den Regeltask.
+  - Verglichen wird mit `Host` statt mit einer festen Adresse, weil das Captive Portal die Seite unter jedem Namen ausliefert (NET-02).
+  - Anfragen ohne `Origin` bleiben erlaubt. So arbeiten curl und die Befehle in `docs/hardwaretest.md` weiter; ein Browser lässt den Kopf bei fremden POST und PUT nicht weg.
+  - Der Vergleich ist eine reine Funktion in `firmware/net/request_path.c` (`net_origin_allowed`) und auf dem Host getestet. Köpfe über 96 Zeichen gelten als fremd.
+  - Geprüft wird nach dem Lesen des Inhalts, damit kein ungelesener Rest auf der Verbindung bleibt.
+- **Verworfen:**
+  - Anmeldung mit Passwort oder Token: eine neue Funktion mit eigener Oberfläche, außerhalb des Umfangs.
+  - Nur `Content-Type: application/json` verlangen: Start, Stopp und Reset haben keinen Inhalt.
+  - Feste Adresse `http://192.168.4.1` verlangen: sperrt die Seite aus, wenn das Handy sie unter einem anderen Namen geöffnet hat.
+- **Grenzen:**
+  - Der WebSocket `/ws` prüft die Herkunft nicht. Eine fremde Seite könnte die Livewerte mitlesen, aber nichts schalten.
+  - Der Vergleich ist buchstabengenau. Browser schreiben Hostnamen in beiden Köpfen klein; ob jedes Handy die eigene Seite durchlässt, belegt `docs/hardwaretest.md` H8-15.

@@ -1,5 +1,6 @@
 /*
- * Tests der Pfadzerlegung aus firmware/net (API-02, NET-02, NET-03, E-039).
+ * Tests der Pfadzerlegung und der Herkunftsprüfung aus firmware/net
+ * (API-02, NET-02, NET-03, E-039, E-053).
  * Reines C, deshalb auf dem Host prüfbar, obwohl es zum Webserver gehört.
  */
 #include "unity.h"
@@ -132,6 +133,47 @@ static void test_too_long_path_is_rejected(void)
     TEST_ASSERT_TRUE(net_static_file_for(uri, &file));
 }
 
+/* ---- Herkunft der Befehle (E-053) ----------------------------------------- */
+
+/* Programme wie curl senden keinen Kopf "Origin". Sie dürfen Befehle senden. */
+static void test_request_without_origin_is_allowed(void)
+{
+    TEST_ASSERT_TRUE(net_origin_allowed(NULL, "192.168.4.1"));
+    TEST_ASSERT_TRUE(net_origin_allowed("", "192.168.4.1"));
+}
+
+/* Die eigene Seite: Origin ist "http://" und genau der Host der Anfrage.
+ * Das Captive Portal liefert die Seite unter jedem Namen aus (NET-02). */
+static void test_own_page_is_allowed(void)
+{
+    TEST_ASSERT_TRUE(net_origin_allowed("http://192.168.4.1", "192.168.4.1"));
+    TEST_ASSERT_TRUE(net_origin_allowed("http://beispiel.de", "beispiel.de"));
+    TEST_ASSERT_TRUE(net_origin_allowed("http://localhost:8080", "localhost:8080"));
+}
+
+static void test_foreign_page_is_rejected(void)
+{
+    TEST_ASSERT_FALSE(net_origin_allowed("http://fremd.example", "192.168.4.1"));
+    TEST_ASSERT_FALSE(net_origin_allowed("null", "192.168.4.1")); /* z. B. eine lokale Datei */
+    TEST_ASSERT_FALSE(net_origin_allowed("https://192.168.4.1", "192.168.4.1"));
+}
+
+/* Ein Name, der nur so anfängt oder aufhört wie der eigene, ist fremd */
+static void test_similar_names_are_rejected(void)
+{
+    TEST_ASSERT_FALSE(net_origin_allowed("http://192.168.4.1.fremd.example", "192.168.4.1"));
+    TEST_ASSERT_FALSE(net_origin_allowed("http://192.168.4.1", "192.168.4.10"));
+    TEST_ASSERT_FALSE(net_origin_allowed("http://192.168.4.1:81", "192.168.4.1"));
+}
+
+/* Ohne Host lässt sich die Herkunft nicht vergleichen */
+static void test_origin_without_host_is_rejected(void)
+{
+    TEST_ASSERT_FALSE(net_origin_allowed("http://192.168.4.1", NULL));
+    TEST_ASSERT_FALSE(net_origin_allowed("http://192.168.4.1", ""));
+    TEST_ASSERT_FALSE(net_origin_allowed("http://", ""));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -146,5 +188,10 @@ int main(void)
     RUN_TEST(test_content_types);
     RUN_TEST(test_unsafe_paths_are_rejected);
     RUN_TEST(test_too_long_path_is_rejected);
+    RUN_TEST(test_request_without_origin_is_allowed);
+    RUN_TEST(test_own_page_is_allowed);
+    RUN_TEST(test_foreign_page_is_rejected);
+    RUN_TEST(test_similar_names_are_rejected);
+    RUN_TEST(test_origin_without_host_is_rejected);
     return UNITY_END();
 }

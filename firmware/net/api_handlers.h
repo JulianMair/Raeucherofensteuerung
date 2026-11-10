@@ -1,10 +1,10 @@
 /*
  * REST-API nach docs/api.yaml (API-02, ARC-04 bis ARC-07, E-028, E-039).
  *
- * Jeder Befehl: Inhalt lesen, mit proto prüfen, laufende Nummer vergeben,
- * ohne Warten in die Befehlsqueue, dann im Snapshot auf das Ergebnis dieser
- * Nummer warten, höchstens API_RESULT_TIMEOUT_MS. Abfragen lesen nur die
- * Snapshot-Kopie. Mit der Regelung spricht dieses Modul ausschließlich über
+ * Jeder Befehl: Inhalt lesen, Herkunft prüfen (E-053), mit proto prüfen,
+ * laufende Nummer vergeben, ohne Warten in die Befehlsqueue, dann im
+ * Snapshot auf das Ergebnis dieser Nummer warten, höchstens
+ * API_RESULT_TIMEOUT_MS. Abfragen lesen nur die Snapshot-Kopie. Mit der Regelung spricht dieses Modul ausschließlich über
  * rof_exchange und proto, nie über core oder Treiber.
  */
 #ifndef API_HANDLERS_H
@@ -19,6 +19,7 @@
 #define API_RESULT_TIMEOUT_MS 2000u /* danach 504, so steht es in der API */
 #define API_RESULT_POLL_MS 50u      /* so oft wird im Snapshot nachgesehen */
 #define API_SNAPSHOT_WAIT_MS 100u   /* längste Wartezeit auf den Mutex */
+#define API_HEADER_MAX 96u          /* längster Kopf "Origin" oder "Host", der geprüft wird (E-053) */
 /* Pfade unter /api; der HTTP-Server prüft beim Übersetzen, dass alle passen (E-039) */
 #define API_ROUTE_COUNT 8u
 
