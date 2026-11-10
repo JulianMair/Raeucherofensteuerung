@@ -561,3 +561,15 @@ Jede nicht offensichtliche Entscheidung mit Kontext, Entscheidung und verworfene
 - **Verworfen:**
   - M11 bis nach den Hardwaretests anhalten: hätte alles andere blockiert.
   - Die Hardware im Bericht weglassen: Anforderungen wie NET-01 lassen sich nur auf der Platine belegen.
+
+## E-052 Verbindungsverlust nicht vom Browser bestätigen lassen (nach M11)
+
+- **Kontext:** Bei einer Durchsicht nach M11 fiel auf: Nach 3,5 s Stille rief `connectLive` nur `close()` auf und meldete „getrennt“ erst im Ereignis `onclose` (E-045). Im toten Netz feuert ein Browser `onclose` aber erst, wenn seine eigene Wartezeit für das Schließen abläuft, je nach Browser nach Sekunden bis etwa einer Minute. So lange hätte die Oberfläche alte Werte wie aktuelle gezeigt. Die Tests fanden das nicht, weil der Fake-WebSocket das Schließen sofort bestätigte.
+- **Entscheidung:**
+  - Nach der Stille gibt `connectLive` die Verbindung selbst auf: Status „getrennt“, `close()`, neuer Versuch. Ein spätes `onclose` der alten Verbindung zählt nicht mehr.
+  - Dieselbe Frist gilt für den Verbindungsaufbau. Ein Versuch, der hängt, wird nach 3,5 s aufgegeben und wiederholt; sonst käme die Seite nach der Rückkehr ins WLAN erst mit dem nächsten TCP-Versuch des Browsers zurück.
+  - Der Fake-WebSocket kann ein totes Netz nachstellen (`unresponsive`): `close()` wird angenommen, `onclose` bleibt aus.
+- **Verworfen:**
+  - Den Status aus dem Alter der letzten Nachricht ableiten, ohne die Verbindung aufzugeben: zwei Quellen für denselben Zustand, und der neue Versuch käme trotzdem zu spät.
+  - Ping-Nachrichten vom Browser: Das Gerät sendet ohnehin jede Sekunde, die Stille ist schon das Signal.
+- **Offen:** Auf dem Handy belegt das erst `docs/hardwaretest.md` H9-08 und H9-09.

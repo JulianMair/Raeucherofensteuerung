@@ -2,8 +2,9 @@
 //
 // Das Gerät schickt jede Sekunde den Zustand. Bricht die Verbindung ab,
 // verbindet sich die Oberfläche selbst neu, mit wachsender Wartezeit.
-// Kommt zu lange keine Nachricht, gilt die Verbindung ebenfalls als
-// getrennt: Verlässt ein Handy das WLAN, meldet TCP das oft erst nach Minuten.
+// Kommt zu lange keine Nachricht oder steht die Verbindung nicht rechtzeitig,
+// gilt sie ebenfalls als getrennt: Verlässt ein Handy das WLAN, meldet TCP
+// das oft erst nach Minuten (E-045, E-052).
 import type { StateSnapshot } from "./types";
 
 /* Was die Oberfläche von einem WebSocket braucht. Die Tests setzen einen Fake ein. */
@@ -64,11 +65,6 @@ export function connectLive(createSocket: SocketFactory, url: string, callbacks:
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   let silenceTimer: ReturnType<typeof setTimeout> | undefined;
 
-  const watchSilence = () => {
-    clearTimeout(silenceTimer);
-    silenceTimer = setTimeout(() => socket?.close(), SILENCE_LIMIT_MS);
-  };
-
   const scheduleReconnect = () => {
     clearTimeout(silenceTimer);
     const delay = RECONNECT_DELAYS_MS[Math.min(attempt, RECONNECT_DELAYS_MS.length - 1)];
@@ -76,10 +72,30 @@ export function connectLive(createSocket: SocketFactory, url: string, callbacks:
     reconnectTimer = setTimeout(open, delay);
   };
 
+  // E-052: Die stille Verbindung sofort aufgeben, ohne auf onclose zu warten.
+  // Im toten Netz bestätigt der Browser das Schließen erst nach seiner
+  // eigenen Wartezeit, und so lange sähe die Anzeige aus wie verbunden.
+  const giveUpSilentSocket = () => {
+    const silent = socket;
+    if (silent === null) {
+      return;
+    }
+    socket = null; // ein spätes onclose dieser Verbindung zählt nicht mehr
+    callbacks.onStatus("closed");
+    silent.close();
+    scheduleReconnect();
+  };
+
+  const watchSilence = () => {
+    clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(giveUpSilentSocket, SILENCE_LIMIT_MS);
+  };
+
   function open() {
     callbacks.onStatus("connecting");
     const current = createSocket(url);
     socket = current;
+    watchSilence(); // die Frist gilt schon für den Verbindungsaufbau
     current.onopen = () => {
       attempt = 0;
       callbacks.onStatus("open");

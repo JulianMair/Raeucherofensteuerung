@@ -97,6 +97,50 @@ describe("Liveverbindung", () => {
     expect(fake.latest()).not.toBe(first);
   });
 
+  /* E-052: Im toten Netz bestätigt der Browser das Schließen erst nach
+   * seiner eigenen Wartezeit. Darauf darf die Anzeige nicht warten. */
+  it("meldet die Trennung sofort, auch wenn der Browser das Schließen nicht bestätigt", () => {
+    fake.latest().open();
+    fake.latest().send(exampleState);
+    const first = fake.latest();
+    first.unresponsive = true;
+
+    vi.advanceTimersByTime(SILENCE_LIMIT_MS);
+
+    expect(first.closed).toBe(true);
+    expect(statuses.at(-1)).toBe("closed");
+    vi.advanceTimersByTime(RECONNECT_DELAYS_MS[0] ?? 0);
+    expect(fake.latest()).not.toBe(first);
+  });
+
+  it("zählt das späte Schließen einer aufgegebenen Verbindung nicht noch einmal", () => {
+    fake.latest().open();
+    const first = fake.latest();
+    first.unresponsive = true;
+    vi.advanceTimersByTime(SILENCE_LIMIT_MS + (RECONNECT_DELAYS_MS[0] ?? 0));
+    fake.latest().open();
+    const statusesBefore = [...statuses];
+    const socketsBefore = fake.sockets.length;
+
+    first.drop(); /* der Browser meldet das Ende der alten Verbindung erst jetzt */
+    vi.advanceTimersByTime(RECONNECT_DELAYS_MS[0] ?? 0);
+
+    expect(statuses).toEqual(statusesBefore);
+    expect(fake.sockets.length).toBe(socketsBefore);
+  });
+
+  it("gibt einen Verbindungsversuch auf, der hängt, und versucht es neu", () => {
+    const first = fake.latest();
+    first.unresponsive = true; /* nie geöffnet: Das Gerät ist nicht erreichbar */
+
+    vi.advanceTimersByTime(SILENCE_LIMIT_MS);
+
+    expect(first.closed).toBe(true);
+    expect(statuses.at(-1)).toBe("closed");
+    vi.advanceTimersByTime(RECONNECT_DELAYS_MS[0] ?? 0);
+    expect(fake.latest()).not.toBe(first);
+  });
+
   it("jede Nachricht verlängert die Frist", () => {
     fake.latest().open();
     for (let i = 0; i < 10; i++) {

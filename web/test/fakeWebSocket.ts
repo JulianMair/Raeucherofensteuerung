@@ -8,6 +8,8 @@ export class FakeSocket implements SocketLike {
   onclose: (() => void) | null = null;
   onerror: (() => void) | null = null;
   closed = false;
+  /* Totes Netz: Der Browser nimmt close() an, meldet onclose aber erst viel später */
+  unresponsive = false;
 
   constructor(readonly url: string) {}
 
@@ -27,7 +29,9 @@ export class FakeSocket implements SocketLike {
 
   close(): void {
     this.closed = true;
-    this.onclose?.();
+    if (!this.unresponsive) {
+      this.onclose?.();
+    }
   }
 }
 
