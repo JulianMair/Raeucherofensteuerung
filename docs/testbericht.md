@@ -1,6 +1,6 @@
 # Testbericht
 
-Stand des Codes: `040e283`, gemessen am 2026-11-07 auf macOS (Apple Silicon). Dieselben Prüfungen laufen bei jedem Push in GitHub Actions (`.github/workflows/ci.yml`); der letzte Lauf vor M11 war [#18](https://github.com/JulianMair/Raeucherofensteuerung/actions/runs/42373296353) für `187ba70`, grün. Der Lauf zu M11 steht im KI-Log.
+Stand des Codes: `0d17120`, gemessen am 2026-11-11 auf macOS (Apple Silicon), nach der Durchsicht im Anschluss an M11. Dieselben Prüfungen laufen bei jedem Push in GitHub Actions (`.github/workflows/ci.yml`); der Lauf zu M11 war [#19](https://github.com/JulianMair/Raeucherofensteuerung/actions/runs/42377911218) für `997d3b1`, grün. Spätere Läufe stehen im KI-Log.
 
 Die Tests auf der echten Platine stehen noch aus (Abschnitt „Hardware“). Ihre Ergebnisse werden hier und in `docs/hardwaretest.md` nachgetragen (E-051).
 
@@ -8,16 +8,16 @@ Die Tests auf der echten Platine stehen noch aus (Abschnitt „Hardware“). Ihr
 
 | Prüfung | Ergebnis |
 |---|---|
-| Unity-Tests auf dem Host | 398 Tests in 19 Programmen, 0 Fehlschläge |
+| Unity-Tests auf dem Host | 403 Tests in 19 Programmen, 0 Fehlschläge |
 | ctest insgesamt | 39 von 39 bestanden: die 19 Unity-Programme und 20 Prüfungen mit Skripten |
 | Zweigabdeckung `core/safety` (gcovr) | Zeilen 100 % (100 von 100), Zweige 100 % (80 von 80) |
 | cppcheck | keine Funde (lokal 2.22, in CI 2.13) |
 | Compiler | C11 mit `-Wall -Wextra -Wpedantic -Werror`, keine Warnung |
 | OpenAPI (`docs/api.yaml`, Redocly 2.64.0) | gültig, 3 begründete Ausnahmen (E-029) |
-| Weboberfläche | Lint und Typprüfung ohne Fehler, 105 Vitest-Tests in 10 Dateien bestanden |
-| Größenbudget der Oberfläche | 34 662 B gzip von höchstens 81 920 B (42 %) |
-| Firmware (`idf.py build`, ESP-IDF v5.5.6) | baut, App 916 112 B (0xdfa90), 71 % der App-Partition frei |
-| Symbolprüfung `firmware/net` | 80 Symbole geprüft, kein Aufruf von core oder Treibern |
+| Weboberfläche | Lint und Typprüfung ohne Fehler, 108 Vitest-Tests in 10 Dateien bestanden |
+| Größenbudget der Oberfläche | 34 709 B gzip von höchstens 81 920 B (42 %) |
+| Firmware (`idf.py build`, ESP-IDF v5.5.6) | baut, App 916 656 B (0xdfcb0), 71 % der App-Partition frei |
+| Symbolprüfung `firmware/net` | 83 Symbole geprüft, kein Aufruf von core oder Treibern |
 | Abgleich der Anforderungen | 56 Anforderungen: 45 erfüllt, 10 erfüllt (Hardware ausstehend), 1 teilweise |
 | Rauchtest im Emulator QEMU | bestanden, zwei Läufe (`docs/hardwaretest.md`) |
 | Hardwaretests H7 bis H10 | ausstehend |
@@ -45,11 +45,11 @@ Jedes Testprogramm unter `test/` ist ein eigener ctest-Eintrag. Die Zeit ist in 
 | `test_ds18b20_protocol` | CRC, ROM-Adresse, Scratchpad | 13 |
 | `test_ds18b20_sensors` | Messablauf ohne Warten, Busfehler | 17 |
 | `test_led_pwm` | LED-Ausgang mit Haltezeit | 8 |
-| `test_request_path` | Pfade des Webservers | 11 |
+| `test_request_path` | Pfade des Webservers, Herkunft der Befehle (E-053) | 16 |
 | `test_dns_message` | DNS-Antworten des Captive Portals | 17 |
 | `test_wifi_credentials` | Prüfung des WLAN-Passworts | 5 |
 | `test_integration` | siehe nächster Abschnitt | 10 |
-| **Summe** | | **398** |
+| **Summe** | | **403** |
 
 Die Tests für `platform/esp32` und `firmware/net` prüfen die reinen Teile dieser Schichten auf dem Host. Der Code, der ESP-IDF aufruft, wird nur gebaut und auf der Hardware geprüft.
 
@@ -81,14 +81,14 @@ Vitest mit `@testing-library/preact` in jsdom. REST kommt aus MSW, die Livewerte
 | `web/test/status.test.tsx` | 30 |
 | `web/test/controls.test.tsx` | 20 |
 | `web/test/validation.test.ts` | 15 |
+| `web/test/live.test.ts` | 11 |
 | `web/test/client.test.ts` | 9 |
-| `web/test/live.test.ts` | 8 |
 | `web/test/labels.test.ts` | 7 |
 | `web/test/sensors.test.tsx` | 7 |
 | `web/test/history.test.ts` | 4 |
 | `web/test/chart.test.tsx` | 3 |
 | `web/test/App.test.tsx` | 2 |
-| **Summe** | **105** |
+| **Summe** | **108** |
 
 Abgedeckt sind die Fälle aus CLAUDE.md: Anzeige aller Zustände, ungültige Eingaben, abgelehnter Sollwert, Verbindungsabbruch und Wiederverbindung, sicherer Zustand.
 
@@ -145,6 +145,7 @@ Ein Test, der nie scheitern kann, belegt nichts. Deshalb wurde jede neue Prüfun
   - M8: Pfade, DNS, Platzhalter und die Symbolprüfung am echten Build
   - M9: das Erkennen von Stille auf dem WebSocket
   - M10: die Prognose
+  - nach M11: das Aufgeben einer stillen Verbindung (drei Tests rot am alten Code) und die Herkunftsprüfung (fünf Tests rot, bevor es die Funktion gab)
 
 ## Von Tests und Prüfungen gefundene Fehler
 
@@ -172,6 +173,9 @@ Ein Test, der nie scheitern kann, belegt nichts. Deshalb wurde jede neue Prüfun
 | M10 | Test | falsche Erwartung im Lern-Test von `test_forecast` | Test korrigiert |
 | M11 | `requirements_evidence` | veraltete Pfade in `docs/anforderungen.md` | Pfade korrigiert (`040e283`) |
 | M11 | Prüfung jedes Commits in frischem Checkout vor dem Push | `requirements_evidence` verlangte `web/dist` und `firmware/sdkconfig`, die nur lokal existieren; in CI wäre der Host-Job rot gewesen | erzeugte Pfade ausgenommen, mit Gegenprobe (E-049) |
+| nach M11 | Durchsicht des Codes | Nach Stille auf dem WebSocket wartete die Oberfläche auf `onclose`. Im toten Netz bestätigt ein Browser das Schließen erst spät, so lange hätte sie alte Werte wie aktuelle gezeigt. Der Fake-WebSocket bestätigte sofort, deshalb war der Test grün | Die Oberfläche gibt die Verbindung selbst auf; der Fake kann ein totes Netz nachstellen (E-052, `925a685`) |
+| nach M11 | Durchsicht des Codes | Die API nahm Befehle auch an, wenn eine fremde Webseite sie im Browser auslöste; dafür gab es keinen Test | Herkunftsprüfung mit 403 `foreign_origin` (E-053, `8cd1247`) |
+| nach M11 | Erstes Flashen auf der Platine | Die Anleitung nannte den Port nicht, ein laufender Monitor blockierte das Flashen, und die Taste D in menuconfig überschrieb `sdkconfig.defaults` samt Passwort (nicht committet) | README und `docs/hardwaretest.md` ergänzt (`0d17120`) |
 
 ## Hardware
 
@@ -180,7 +184,7 @@ Die Tests auf der Platine führt der Nutzer aus. Die Schritte mit Erwartung steh
 | Block | Schritte | Prüft unter anderem | Anforderungen | Ergebnis |
 |---|---|---|---|---|
 | H7 Firmware-Basis | H7-01 bis H7-10 | Start, Sensoren erkennen, an- und abstecken, gestörter Bus, Neustart, Laufzeit | SAF-10, SEN-03 | ausstehend |
-| H8 Netzwerk | H8-01 bis H8-14 | Platzhalter-Passwort, Access Point, Captive Portal, REST, Rolle und Neustart mit Zuordnung, Heizen mit LED, Sensor beim Heizen abziehen, Reset, WebSocket, Flut, WLAN-Abbruch | ARC-05, ARC-09, SEN-04, CTL-03, API-02, API-03, NET-01 bis NET-04 | ausstehend |
+| H8 Netzwerk | H8-01 bis H8-15 | Platzhalter-Passwort, Access Point, Captive Portal, REST, Rolle und Neustart mit Zuordnung, Heizen mit LED, Sensor beim Heizen abziehen, Reset, WebSocket, Flut, WLAN-Abbruch, Befehl mit fremder Herkunft | ARC-05, ARC-09, SEN-04, CTL-03, API-02, API-03, NET-01 bis NET-04 | ausstehend |
 | H9 Weboberfläche | H9-01 bis H9-11 | Bedienung am Handy, ungültige Eingaben, sicherer Zustand, Verbindungsverlust, Drehen | CTL-03, NET-03, WEB-04 | ausstehend |
 | H10 Prognose | H10-01 bis H10-04 | Grenzen des Kernziels, Anzeige ohne Kernfühler, Prognose mit warmem Wasser | (FC-01 ist im Simulator belegt) | ausstehend |
 
@@ -194,6 +198,9 @@ Die Tests auf der Platine führt der Nutzer aus. Die Schritte mit Erwartung steh
 - **Weboberfläche:** Die Tests laufen in jsdom, nicht in einem echten Browser. Das Layout bei 375 px Breite wurde im Browser von Hand geprüft; echte Handys stehen in H9 aus.
 - **Abdeckung:** Gemessen und gefordert ist sie nur für `core/safety`.
 - **cppcheck:** Lokal läuft 2.22, in CI 2.13. Beide melden unterschiedliche Dinge; maßgeblich ist CI.
+- **Lesefehler:** Ein einzelner Lesefehler des Garraumsensors verriegelt beim Heizen sofort, ohne Wiederholung (SAF-03). Das ist die sichere Seite. Ob es am echten Ofen mit langen Leitungen und schaltender Last zu Fehlauslösungen führt, ist nicht erprobt.
+- **Verbindungsverlust:** Dass die Oberfläche den Verlust nach 3,5 s zeigt, belegt nur der Test mit dem Fake-WebSocket (E-052). Am Handy stehen H9-08 und H9-09 aus.
+- **Herkunft der Befehle:** Geprüft sind die Vergleichsfunktion auf dem Host und der Build. Dass echte Browser die eigene Seite durchlassen und fremde abgewiesen werden, steht in H8-15 aus. Der WebSocket `/ws` prüft die Herkunft nicht (E-053).
 - **Queue über HTTP:** Der HTTP-Server bearbeitet Anfragen nacheinander. Über HTTP liegt deshalb nie mehr als ein Befehl in der Queue; volle Queues prüft nur der Host-Test (E-039).
 
 ## Zahlen nachprüfen

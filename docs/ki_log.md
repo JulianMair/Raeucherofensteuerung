@@ -319,3 +319,29 @@ Kennzeichnung der KI-Nutzung je Meilenstein. Werkzeug: Claude Code (Anthropic). 
 - Vor dem Push prüfte Claude jeden Commit in einem frischen Checkout. Dort meldete `requirements_evidence` zwei Fehler: `web/dist` und `firmware/sdkconfig` gab es nur lokal, in CI wäre der Host-Job rot gewesen. Claude hat die Ausnahme für erzeugte Pfade in den Commit des Skripts gelegt und die noch nicht gepushten Commits wie in M10 auf einem Hilfszweig neu aufgebaut; jeder Commit ist im frischen Checkout geprüft.
 
 **Vom Nutzer geändert oder abgelehnt:** wird nach dem Review nachgetragen.
+
+## 2026-11-10 – Nachtrag: Durchsicht nach M11
+
+**Modell:** Claude Fable 5.2 (Durchsicht und Änderungen am 10. und 11.11.), Claude Opus 5.5 (Begleitung beim ersten Flashen am 07.11.)
+
+**Von der KI erzeugt:**
+- Durchsicht des Projekts auf Auftrag des Nutzers. Zeile für Zeile gelesen: Sicherheitslogik, Regelzyklus, Zustandsautomat, Sensorverwaltung, Prognose, JSON-Leser und Befehlsdekodierung, DS18B20-Treiber, LED-Ausgang, NVS, HTTP-Server, WebSocket, WLAN, API-Handler, Client und Liveverbindung der Oberfläche. Nur überflogen: JSON-Schreiber, DNS, Pfadprüfung, die Komponenten der Oberfläche und die Tests selbst.
+- `fix(web)`: Die Oberfläche gibt eine stille Verbindung selbst auf, statt auf `onclose` zu warten; dieselbe Frist gilt für den Verbindungsaufbau. Drei neue Tests, der Fake-WebSocket kann ein totes Netz nachstellen (E-052).
+- `fix(net)`: Befehle nur von der eigenen Seite, sonst 403 `foreign_origin`. Vergleichsfunktion `net_origin_allowed` mit fünf Tests, `docs/api.yaml`, Text in der Oberfläche, Hardwaretest H8-15 (E-053).
+- `docs`: Flash-Anleitung in README und `docs/hardwaretest.md` nach den Erfahrungen vom ersten Flashen.
+- `docs`: Testbericht mit neu gemessenen Zahlen, drei neuen Zeilen bei den gefundenen Fehlern und drei neuen Grenzen.
+
+**Vom Nutzer entschieden:**
+- Von fünf vorgeschlagenen Punkten vier freigegeben, darunter ausdrücklich die Herkunftsprüfung, die die API ändert.
+- Im Kern wird nichts geändert: Dass ein einzelner Lesefehler des Garraumsensors beim Heizen sofort verriegelt, bleibt so und steht als Grenze im Testbericht.
+
+**Auffälligkeiten beim Umsetzen:**
+- Beide Fehler der Durchsicht lagen hinter grünen Tests. Der Fake-WebSocket bestätigte `close()` sofort, ein Browser im toten Netz tut das nicht. Für Befehle fremder Herkunft gab es keinen Test.
+- Test zuerst: Die drei neuen Tests der Liveverbindung waren am alten Code rot, die fünf Tests der Herkunftsprüfung scheiterten zuerst am fehlenden Symbol. Jeder Commit ist auf dem Host (39 ctest-Einträge), in der Oberfläche (Lint, Typprüfung, 108 Tests, Build, Budget) und mit `idf.py build` geprüft, der zweite zusätzlich mit Redocly.
+- Wie lange ein Browser im toten Netz auf das Schließen wartet, hat Claude aus dem bekannten Verhalten der Browser angegeben, nicht gemessen. Den Beleg liefern erst H9-08 und H9-09.
+- Erstes Flashen am 07.11.: Am Anschluss „USB“ lief eine Firmware des Händlers, der automatische Reset gelang dort nicht; über „UART“ (CH343, unter macOS `/dev/cu.usbmodem…`) ging es ohne Taster. Ohne `-p` probierte `idf.py` auch Bluetooth-Ports, ein laufender Monitor blockierte weitere Versuche.
+- Beim Setzen des WLAN-Passworts gerieten Befehle aus dem Chat als Tastendrücke in ein offenes menuconfig. Die Taste D überschrieb dabei `firmware/sdkconfig.defaults` mit einer Minimalkonfiguration samt Passwort. Claude bemerkte es an `git status`; committet wurde nichts, der Nutzer hat die Datei mit `git restore` wiederhergestellt. Daraus stammt der Hinweis in der README.
+- Erste Beobachtungen auf der Platine am 07.11., noch nicht in `docs/hardwaretest.md` eingetragen (E-051): Start mit „Zustand fault … chamber_unassigned, verriegelt none“ und Tastgrad 0; mit Platzhalter-Passwort kein Access Point, die Regelung läuft weiter; mit eigenem Passwort Access Point mit WPA2, ein Handy wurde mit falschem Passwort abgewiesen und mit richtigem verbunden; Regelzyklus höchstens 3 ms, Stack frei 3936 B, Heap stabil. Sensoren und LED waren noch nicht angeschlossen.
+- Zahlen am Stand `0d17120`: 403 Unity-Tests, 39 ctest-Einträge, 108 Vitest-Tests, Abdeckung von `core/safety` 100 % bei Zeilen und Zweigen, Budget 34 709 B, Firmware 916 656 B, Symbolprüfung 83 Symbole.
+
+**Vom Nutzer geändert oder abgelehnt:** Einen der fünf Vorschläge, weitere Unterlagen ins Repository aufzunehmen, hat der Nutzer abgelehnt. Weiteres wird nach dem Review nachgetragen.
